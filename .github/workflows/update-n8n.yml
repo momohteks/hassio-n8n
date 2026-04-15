@@ -1,0 +1,92 @@
+name: Mise à jour automatique n8n
+
+on:
+  schedule:
+    # Tous les jours à 6h UTC
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    # Permet de déclencher manuellement
+
+jobs:
+  check-and-update:
+    name: Vérifier et mettre à jour n8n
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout du repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Récupérer la dernière version de n8n
+        id: latest
+        run: |
+          LATEST=$(npm view n8n version)
+          echo "version=${LATEST}" >> $GITHUB_OUTPUT
+          echo "Dernière version n8n : ${LATEST}"
+
+      - name: Lire la version actuelle dans config.yaml
+        id: current
+        run: |
+          CURRENT=$(grep '^version:' n8n/config.yaml | sed 's/version: *"//' | sed 's/"//')
+          echo "version=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "Version actuelle dans l'addon : ${CURRENT}"
+
+      - name: Comparer les versions
+        id: compare
+        run: |
+          if [ "${{ steps.latest.outputs.version }}" != "${{ steps.current.outputs.version }}" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Mise à jour nécessaire : ${{ steps.current.outputs.version }} → ${{ steps.latest.outputs.version }}"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "L'addon est déjà à jour (${{ steps.current.outputs.version }})"
+          fi
+
+      - name: Mettre à jour config.yaml
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          NEW_VERSION="${{ steps.latest.outputs.version }}"
+          sed -i "s/^version: \".*\"/version: \"${NEW_VERSION}\"/" n8n/config.yaml
+          echo "config.yaml mis à jour → ${NEW_VERSION}"
+
+      - name: Mettre à jour le Dockerfile
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          NEW_VERSION="${{ steps.latest.outputs.version }}"
+          sed -i "s/^ARG N8N_VERSION=.*/ARG N8N_VERSION=${NEW_VERSION}/" n8n/Dockerfile
+          echo "Dockerfile mis à jour → ${NEW_VERSION}"
+
+      - name: Mettre à jour le CHANGELOG
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          NEW_VERSION="${{ steps.latest.outputs.version }}"
+          DATE=$(date +%Y-%m-%d)
+          ENTRY="## ${NEW_VERSION} — ${DATE}\n\n- Mise à jour n8n vers ${NEW_VERSION}\n"
+          # Insérer après la première ligne (# Changelog)
+          sed -i "1a\\\\n${ENTRY}" n8n/CHANGELOG.md
+          echo "CHANGELOG mis à jour"
+
+      - name: Configurer git
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit et push
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          NEW_VERSION="${{ steps.latest.outputs.version }}"
+          git add n8n/config.yaml n8n/Dockerfile n8n/CHANGELOG.md
+          git commit -m "chore: mise à jour n8n vers ${NEW_VERSION}"
+          git push origin main
+
+      - name: Créer un tag git
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          NEW_VERSION="${{ steps.latest.outputs.version }}"
+          git tag "v${NEW_VERSION}"
+          git push origin "v${NEW_VERSION}"
+          echo "Tag v${NEW_VERSION} créé et poussé"

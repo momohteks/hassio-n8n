@@ -1,0 +1,27 @@
+name: n8n
+version: "2.16.1"
+slug: n8n
+description: n8n — Workflow Automation Platform
+url: https://github.com/momohteks/hassio-n8n
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+ingress: true
+ingress_port: 5678
+ports:
+  8081/tcp: 8081
+ports_description:
+  8081/tcp: Webhooks n8n et API REST
+hassio_api: false
+homeassistant_api: false
+map:
+  - data:rw
+options:
+  webhook_url: ""
+  timezone: "Europe/Paris"
+schema:
+  webhook_url: str?
+  timezone: str
+image: ghcr.io/momohteks/hassio-n8n-{arch}

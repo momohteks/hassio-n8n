@@ -1,0 +1,8 @@
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base:3.20
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.20
+labels:
+  org.opencontainers.image.title: "n8n Home Assistant Addon"
+  org.opencontainers.image.description: "n8n workflow automation for Home Assistant"
+  org.opencontainers.image.source: "https://github.com/momohteks/hassio-n8n"
+  org.opencontainers.image.licenses: "Apache-2.0"

@@ -1,0 +1,5 @@
+# Normaliser les fins de ligne en LF pour tous les fichiers texte
+* text=auto eol=lf
+
+# Scripts shell : toujours LF (sinon le container Linux ne peut pas les exécuter)
+*.sh text eol=lf

@@ -30,7 +30,6 @@ RUN apt-get update \
         curl \
         tzdata \
         ca-certificates \
-        tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Créer l'utilisateur node et préparer les répertoires
@@ -47,5 +46,4 @@ RUN chmod +x /n8n-exports.sh /run.sh
 
 EXPOSE 5678 8081
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/run.sh"]

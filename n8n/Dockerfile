@@ -13,14 +13,16 @@ LABEL \
 USER root
 
 # Ajouter nginx + supervisord + utilitaires
-RUN apk add --no-cache \
+# L'image officielle n8n est Debian-based → apt-get
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         nginx \
         supervisor \
-        bash \
         jq \
         curl \
         tzdata \
-    && rm -rf /var/cache/apk/*
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copier les fichiers de configuration
 COPY nginx.conf /etc/nginx/nginx.conf
@@ -29,9 +31,10 @@ COPY n8n-exports.sh /n8n-exports.sh
 COPY run.sh /run.sh
 
 # Préparer les répertoires et permissions
+# nginx sur Debian tourne sous www-data ; n8n sous node ; /data est pour n8n
 RUN chmod +x /n8n-exports.sh /run.sh \
-    && mkdir -p /data /var/log/nginx /var/lib/nginx/tmp /run/nginx \
-    && chown -R node:node /data /var/log/nginx /var/lib/nginx /run/nginx
+    && mkdir -p /data \
+    && chown -R node:node /data
 
 EXPOSE 5678 8081
 

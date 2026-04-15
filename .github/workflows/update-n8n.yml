@@ -1,92 +1,113 @@
-name: Mise à jour automatique n8n
+name: Mise à jour version addon
 
 on:
   schedule:
-    # Tous les jours à 6h UTC
+    # Chaque jour à 6h UTC : vérifie si une nouvelle version n8n est dispo
     - cron: "0 6 * * *"
   workflow_dispatch:
-    # Permet de déclencher manuellement
+    inputs:
+      mode:
+        description: "Mode de mise à jour"
+        type: choice
+        required: true
+        default: "auto"
+        options:
+          - auto           # check upstream n8n, maj si nouvelle version
+          - rebuild_only   # bump uniquement le 4ème digit (pas de maj n8n)
 
 jobs:
-  check-and-update:
-    name: Vérifier et mettre à jour n8n
+  update:
+    name: Calcul et application de la nouvelle version
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout du repo
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: Récupérer la dernière version de n8n
-        id: latest
-        run: |
-          LATEST=$(npm view n8n version)
-          echo "version=${LATEST}" >> $GITHUB_OUTPUT
-          echo "Dernière version n8n : ${LATEST}"
-
-      - name: Lire la version actuelle dans config.yaml
+      - name: Lire la version actuelle
         id: current
         run: |
-          CURRENT=$(grep '^version:' n8n/config.yaml | sed 's/version: *"//' | sed 's/"//')
-          echo "version=${CURRENT}" >> $GITHUB_OUTPUT
-          echo "Version actuelle dans l'addon : ${CURRENT}"
+          CURRENT=$(grep '^version:' n8n/config.yaml | sed 's/version: *"//; s/"//')
+          CURRENT_N8N=$(echo "$CURRENT" | cut -d. -f1-3)
+          CURRENT_BUILD=$(echo "$CURRENT" | cut -d. -f4)
+          if [ -z "$CURRENT_BUILD" ]; then CURRENT_BUILD=0; fi
+          echo "full=$CURRENT"         >> $GITHUB_OUTPUT
+          echo "n8n=$CURRENT_N8N"      >> $GITHUB_OUTPUT
+          echo "build=$CURRENT_BUILD"  >> $GITHUB_OUTPUT
+          echo "Version actuelle : $CURRENT (n8n=$CURRENT_N8N, build=$CURRENT_BUILD)"
 
-      - name: Comparer les versions
-        id: compare
+      - name: Calculer la nouvelle version
+        id: next
         run: |
-          if [ "${{ steps.latest.outputs.version }}" != "${{ steps.current.outputs.version }}" ]; then
-            echo "update_needed=true" >> $GITHUB_OUTPUT
-            echo "Mise à jour nécessaire : ${{ steps.current.outputs.version }} → ${{ steps.latest.outputs.version }}"
+          MODE="${{ github.event.inputs.mode || 'auto' }}"
+          CURRENT_N8N="${{ steps.current.outputs.n8n }}"
+          CURRENT_BUILD="${{ steps.current.outputs.build }}"
+
+          if [ "$MODE" = "rebuild_only" ]; then
+            # Rebuild manuel : bump 4ème digit uniquement
+            NEW_N8N="$CURRENT_N8N"
+            NEW_BUILD=$((CURRENT_BUILD + 1))
+            REASON="Rebuild manuel (sans changement n8n)"
+            UPDATE=true
           else
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            echo "L'addon est déjà à jour (${{ steps.current.outputs.version }})"
+            # Mode auto : vérifier npm pour nouvelle version n8n
+            LATEST_N8N=$(npm view n8n version)
+            echo "Dernière version n8n sur npm : $LATEST_N8N"
+            if [ "$LATEST_N8N" = "$CURRENT_N8N" ]; then
+              echo "Pas de nouvelle version n8n ($CURRENT_N8N). Rien à faire."
+              UPDATE=false
+            else
+              # Nouvelle version n8n → reset build à 1
+              NEW_N8N="$LATEST_N8N"
+              NEW_BUILD=1
+              REASON="Nouvelle version n8n : $CURRENT_N8N → $NEW_N8N"
+              UPDATE=true
+            fi
+          fi
+
+          echo "update=$UPDATE" >> $GITHUB_OUTPUT
+          if [ "$UPDATE" = "true" ]; then
+            NEW_VERSION="${NEW_N8N}.${NEW_BUILD}"
+            echo "version=$NEW_VERSION"  >> $GITHUB_OUTPUT
+            echo "n8n=$NEW_N8N"          >> $GITHUB_OUTPUT
+            echo "build=$NEW_BUILD"      >> $GITHUB_OUTPUT
+            echo "reason=$REASON"        >> $GITHUB_OUTPUT
+            echo "Nouvelle version : $NEW_VERSION — $REASON"
           fi
 
       - name: Mettre à jour config.yaml
-        if: steps.compare.outputs.update_needed == 'true'
+        if: steps.next.outputs.update == 'true'
         run: |
-          NEW_VERSION="${{ steps.latest.outputs.version }}"
-          sed -i "s/^version: \".*\"/version: \"${NEW_VERSION}\"/" n8n/config.yaml
-          echo "config.yaml mis à jour → ${NEW_VERSION}"
+          sed -i "s/^version: \".*\"/version: \"${{ steps.next.outputs.version }}\"/" n8n/config.yaml
 
-      - name: Mettre à jour le Dockerfile
-        if: steps.compare.outputs.update_needed == 'true'
+      - name: Mettre à jour Dockerfile
+        if: steps.next.outputs.update == 'true'
         run: |
-          NEW_VERSION="${{ steps.latest.outputs.version }}"
-          sed -i "s/^ARG N8N_VERSION=.*/ARG N8N_VERSION=${NEW_VERSION}/" n8n/Dockerfile
-          echo "Dockerfile mis à jour → ${NEW_VERSION}"
+          sed -i "s/^ARG N8N_VERSION=.*/ARG N8N_VERSION=${{ steps.next.outputs.n8n }}/" n8n/Dockerfile
 
-      - name: Mettre à jour le CHANGELOG
-        if: steps.compare.outputs.update_needed == 'true'
+      - name: Mettre à jour CHANGELOG
+        if: steps.next.outputs.update == 'true'
         run: |
-          NEW_VERSION="${{ steps.latest.outputs.version }}"
           DATE=$(date +%Y-%m-%d)
-          ENTRY="## ${NEW_VERSION} — ${DATE}\n\n- Mise à jour n8n vers ${NEW_VERSION}\n"
-          # Insérer après la première ligne (# Changelog)
+          VERSION="${{ steps.next.outputs.version }}"
+          REASON="${{ steps.next.outputs.reason }}"
+          ENTRY="## ${VERSION} — ${DATE}\n\n- ${REASON}\n"
           sed -i "1a\\\\n${ENTRY}" n8n/CHANGELOG.md
-          echo "CHANGELOG mis à jour"
 
-      - name: Configurer git
-        if: steps.compare.outputs.update_needed == 'true'
+      - name: Commit et tag
+        if: steps.next.outputs.update == 'true'
         run: |
-          git config user.name "github-actions[bot]"
+          VERSION="${{ steps.next.outputs.version }}"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Commit et push
-        if: steps.compare.outputs.update_needed == 'true'
-        run: |
-          NEW_VERSION="${{ steps.latest.outputs.version }}"
           git add n8n/config.yaml n8n/Dockerfile n8n/CHANGELOG.md
-          git commit -m "chore: mise à jour n8n vers ${NEW_VERSION}"
+          git commit -m "chore: bump version vers ${VERSION} — ${{ steps.next.outputs.reason }}"
           git push origin main
-
-      - name: Créer un tag git
-        if: steps.compare.outputs.update_needed == 'true'
-        run: |
-          NEW_VERSION="${{ steps.latest.outputs.version }}"
-          git tag "v${NEW_VERSION}"
-          git push origin "v${NEW_VERSION}"
-          echo "Tag v${NEW_VERSION} créé et poussé"
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+          echo "Tag v${VERSION} créé et poussé → déclenche le build Docker"

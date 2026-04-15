@@ -3,11 +3,12 @@ name: Build et publication des images Docker
 on:
   push:
     tags:
-      - "v*.*.*"
+      # Format 4-digits : v{n8n_major}.{n8n_minor}.{n8n_patch}.{addon_build}
+      - "v*.*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version à builder (ex: 2.16.1)"
+        description: "Version complète à builder (ex: 2.16.1.4)"
         required: true
 
 jobs:
@@ -30,17 +31,20 @@ jobs:
       - name: Checkout du repo
         uses: actions/checkout@v4
 
-      - name: Extraire la version
+      - name: Extraire les versions
         id: version
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            # Tag git : v2.16.1 → 2.16.1
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            FULL="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION="${{ github.event.inputs.version }}"
+            FULL="${{ github.event.inputs.version }}"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Version : ${VERSION}"
+          # N8N_VERSION = 3 premiers digits (ex : 2.16.1.4 → 2.16.1)
+          N8N=$(echo "$FULL" | cut -d. -f1-3)
+          echo "full=$FULL" >> $GITHUB_OUTPUT
+          echo "n8n=$N8N"   >> $GITHUB_OUTPUT
+          echo "Version addon complète : $FULL"
+          echo "Version n8n à installer : $N8N"
 
       - name: Login sur ghcr.io
         uses: docker/login-action@v3
@@ -60,9 +64,10 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           build-args: |
-            N8N_VERSION=${{ steps.version.outputs.version }}
+            N8N_VERSION=${{ steps.version.outputs.n8n }}
           tags: |
-            ghcr.io/momohteks/hassio-n8n-${{ matrix.arch }}:${{ steps.version.outputs.version }}
+            ghcr.io/momohteks/hassio-n8n-${{ matrix.arch }}:${{ steps.version.outputs.full }}
+            ghcr.io/momohteks/hassio-n8n-${{ matrix.arch }}:${{ steps.version.outputs.n8n }}
             ghcr.io/momohteks/hassio-n8n-${{ matrix.arch }}:latest
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
@@ -82,18 +87,19 @@ jobs:
         id: version
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
+            FULL="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION="${{ github.event.inputs.version }}"
+            FULL="${{ github.event.inputs.version }}"
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          N8N=$(echo "$FULL" | cut -d. -f1-3)
+          echo "full=$FULL" >> $GITHUB_OUTPUT
+          echo "n8n=$N8N"   >> $GITHUB_OUTPUT
 
       - name: Extraire les notes de changelog
         id: changelog
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          # Extraire le bloc du CHANGELOG pour cette version
-          NOTES=$(awk "/^## ${VERSION}/,/^## [0-9]/" n8n/CHANGELOG.md | head -n -1 | tail -n +2)
+          FULL="${{ steps.version.outputs.full }}"
+          NOTES=$(awk "/^## ${FULL}/,/^## [0-9]/" n8n/CHANGELOG.md | head -n -1 | tail -n +2)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
           echo "${NOTES}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -101,19 +107,20 @@ jobs:
       - name: Créer la GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: n8n ${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.full }}
+          name: Addon ${{ steps.version.outputs.full }} (n8n ${{ steps.version.outputs.n8n }})
           body: |
-            ## n8n ${{ steps.version.outputs.version }}
+            ## Addon hassio-n8n ${{ steps.version.outputs.full }}
+            Embarque **n8n ${{ steps.version.outputs.n8n }}**.
 
             ${{ steps.changelog.outputs.notes }}
 
             ### Images Docker
 
-            | Architecture | Image |
-            |---|---|
-            | amd64 | `ghcr.io/momohteks/hassio-n8n-amd64:${{ steps.version.outputs.version }}` |
-            | aarch64 | `ghcr.io/momohteks/hassio-n8n-aarch64:${{ steps.version.outputs.version }}` |
+            | Architecture | Tag complet | Tag n8n (flottant) |
+            |---|---|---|
+            | amd64 | `ghcr.io/momohteks/hassio-n8n-amd64:${{ steps.version.outputs.full }}` | `...:${{ steps.version.outputs.n8n }}` |
+            | aarch64 | `ghcr.io/momohteks/hassio-n8n-aarch64:${{ steps.version.outputs.full }}` | `...:${{ steps.version.outputs.n8n }}` |
 
             ### Installation
 

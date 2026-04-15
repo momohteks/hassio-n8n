@@ -19,5 +19,10 @@ if [ -n "${WEBHOOK_URL}" ]; then
     echo "[INFO] Webhook URL : ${WEBHOOK_URL}"
 fi
 
+# /data est monté par HA en root:root → donner la propriété à l'utilisateur node
+# (sinon n8n ne peut pas créer /data/.n8n)
+chown -R node:node /data
+chmod 755 /data
+
 # Lancer supervisord (gère nginx + n8n)
 exec supervisord -c /etc/supervisor/conf.d/supervisord.conf

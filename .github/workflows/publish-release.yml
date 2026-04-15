@@ -23,10 +23,8 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
-            base_image: ghcr.io/home-assistant/amd64-base:3.20
           - arch: aarch64
             platform: linux/arm64
-            base_image: ghcr.io/home-assistant/aarch64-base:3.20
 
     steps:
       - name: Checkout du repo
@@ -62,7 +60,6 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           build-args: |
-            BUILD_FROM=${{ matrix.base_image }}
             N8N_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/momohteks/hassio-n8n-${{ matrix.arch }}:${{ steps.version.outputs.version }}

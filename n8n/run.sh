@@ -1,17 +1,22 @@
-#!/usr/bin/with-contenv bashio
+#!/bin/bash
+set -e
 
-bashio::log.info "Démarrage de l'addon n8n..."
-
-# Lire les options depuis Home Assistant
-WEBHOOK_URL=$(bashio::config 'webhook_url' '')
-TIMEZONE=$(bashio::config 'timezone' 'Europe/Paris')
+# Lire les options HA depuis /data/options.json
+if [ -f /data/options.json ]; then
+    WEBHOOK_URL=$(jq -r '.webhook_url // ""' /data/options.json)
+    TIMEZONE=$(jq -r '.timezone // "Europe/Paris"' /data/options.json)
+else
+    WEBHOOK_URL=""
+    TIMEZONE="Europe/Paris"
+fi
 
 export WEBHOOK_URL
 export TIMEZONE
 
-bashio::log.info "Fuseau horaire : ${TIMEZONE}"
+echo "[INFO] Démarrage de l'addon n8n"
+echo "[INFO] Fuseau horaire : ${TIMEZONE}"
 if [ -n "${WEBHOOK_URL}" ]; then
-    bashio::log.info "Webhook URL : ${WEBHOOK_URL}"
+    echo "[INFO] Webhook URL : ${WEBHOOK_URL}"
 fi
 
 # Lancer supervisord (gère nginx + n8n)

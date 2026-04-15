@@ -1,6 +1,6 @@
 build_from:
-  amd64: ghcr.io/home-assistant/amd64-base:3.20
-  aarch64: ghcr.io/home-assistant/aarch64-base:3.20
+  amd64: docker.n8n.io/n8nio/n8n:2.16.1
+  aarch64: docker.n8n.io/n8nio/n8n:2.16.1
 labels:
   org.opencontainers.image.title: "n8n Home Assistant Addon"
   org.opencontainers.image.description: "n8n workflow automation for Home Assistant"

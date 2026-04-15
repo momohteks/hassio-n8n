@@ -11,11 +11,19 @@ LABEL \
     io.hass.type="addon" \
     io.hass.version="${N8N_VERSION}"
 
-# Installer les dépendances runtime + build (pour native deps sans prebuild)
-# puis installer n8n et nettoyer les build deps
+# Étape 1 : installer les build deps + n8n + retirer les build deps
+# (séparé du runtime pour que --auto-remove ne supprime pas supervisor/nginx)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        # Runtime
+        python3 make g++ git ca-certificates \
+    && npm install -g --omit=dev --unsafe-perm n8n@${N8N_VERSION} \
+    && npm cache clean --force \
+    && apt-get purge -y --auto-remove python3 make g++ git \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm /root/.cache
+
+# Étape 2 : installer les dépendances runtime qui doivent rester dans l'image
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         nginx \
         supervisor \
         jq \
@@ -23,16 +31,7 @@ RUN apt-get update \
         tzdata \
         ca-certificates \
         tini \
-        # Build deps pour les native modules npm
-        python3 \
-        make \
-        g++ \
-        git \
-    && npm install -g --omit=dev --unsafe-perm n8n@${N8N_VERSION} \
-    && npm cache clean --force \
-    # Supprimer les build deps (gain ~500MB)
-    && apt-get purge -y --auto-remove python3 make g++ git \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm /root/.cache
+    && rm -rf /var/lib/apt/lists/*
 
 # Créer l'utilisateur node et préparer les répertoires
 RUN mkdir -p /data \

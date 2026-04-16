@@ -15,9 +15,11 @@ LABEL \
 # ---------------------------------------------------------------------------
 # Étape 1 — Installer Node.js 22, build deps, n8n, Python Task Runner
 # ---------------------------------------------------------------------------
-# Le Python Task Runner (interne mode) est attendu par n8n à l'emplacement
-# /usr/local/lib/node_modules/@n8n/task-runner-python/.venv/bin/python
+# Le Python Task Runner (internal mode) est attendu par n8n à l'emplacement
+# $(npm root -g)/@n8n/task-runner-python/.venv/bin/python
 # (path résolu depuis __dirname du CLI n8n + ../../../@n8n/task-runner-python).
+# NodeSource installe Node avec prefix /usr, donc npm root -g = /usr/lib/
+# node_modules (PAS /usr/local/lib/node_modules).
 # On clone la source du runner depuis le tag n8n@${N8N_VERSION} puis on
 # provisionne un venv Python 3.13 avec la seule dépendance : websockets.
 RUN apt-get update \
@@ -40,14 +42,20 @@ RUN apt-get update \
     && git clone --depth 1 --branch "n8n@${N8N_VERSION}" \
            https://github.com/n8n-io/n8n.git /tmp/n8n-src \
        || git clone --depth 1 https://github.com/n8n-io/n8n.git /tmp/n8n-src \
-    && mkdir -p /usr/local/lib/node_modules/@n8n/task-runner-python \
+    # Installation à l'emplacement EXACT attendu par n8n (résolu via npm)
+    && NPM_ROOT="$(npm root -g)" \
+    && echo "[build] npm root -g = ${NPM_ROOT}" \
+    && mkdir -p "${NPM_ROOT}/@n8n/task-runner-python" \
     && cp -r /tmp/n8n-src/packages/@n8n/task-runner-python/src \
              /tmp/n8n-src/packages/@n8n/task-runner-python/pyproject.toml \
-             /usr/local/lib/node_modules/@n8n/task-runner-python/ \
+             "${NPM_ROOT}/@n8n/task-runner-python/" \
     # Venv avec la Python 3.13 native du base image
-    && python3 -m venv /usr/local/lib/node_modules/@n8n/task-runner-python/.venv \
-    && /usr/local/lib/node_modules/@n8n/task-runner-python/.venv/bin/pip \
+    && python3 -m venv "${NPM_ROOT}/@n8n/task-runner-python/.venv" \
+    && "${NPM_ROOT}/@n8n/task-runner-python/.venv/bin/pip" \
            install --no-cache-dir "websockets>=15.0.1" \
+    # Vérification en dur : le python du venv doit exister
+    && test -x "${NPM_ROOT}/@n8n/task-runner-python/.venv/bin/python" \
+    && echo "[build] Python Task Runner venv OK at ${NPM_ROOT}/@n8n/task-runner-python/.venv" \
     # Nettoyage build deps (on ne peut PAS purger python3-venv/dev car le venv en dépend)
     && rm -rf /tmp/n8n-src \
     && apt-get purge -y --auto-remove make g++ git gnupg python3-dev \

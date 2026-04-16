@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.16.1.8 — 2026-04-17
+
+- Fix Python Task Runner v2 : le venv était installé sous
+  `/usr/local/lib/node_modules/` mais NodeSource met les modules globaux
+  sous `/usr/lib/node_modules/` (prefix `/usr` au lieu de `/usr/local`).
+  Le venv est désormais provisionné à l'emplacement exact résolu par
+  `npm root -g` (= `/usr/lib/node_modules/@n8n/task-runner-python/.venv/`),
+  qui correspond à ce que n8n cherche via `__dirname + '../../../@n8n/...'`.
+- Ajout d'un `test -x` en fin d'étape pour échouer le build si le venv
+  n'est pas correctement provisionné.
+
 ## 2.16.1.7 — 2026-04-16
 
 - **Python Task Runner** désormais fonctionnel en mode `internal` :

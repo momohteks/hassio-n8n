@@ -6,7 +6,9 @@
 # ---------------------------------------------------------------------------
 
 # Port interne n8n (nginx est en façade sur 5678 et 8081)
-export N8N_PORT=5679
+# NB : on utilise 5680 pour éviter la collision avec le Task Broker interne
+# de n8n 2.x (qui écoute par défaut sur 5679).
+export N8N_PORT=5680
 export N8N_PROTOCOL=http
 export N8N_HOST=0.0.0.0
 
@@ -42,8 +44,11 @@ export EXECUTIONS_MODE=regular
 export EXECUTIONS_PROCESS=main
 
 # Task Runners (n8n 2.x)
-# Désactivés : le Task Broker interne tentait sinon de se lier au même port
-# que N8N_PORT (5679) et provoquait une collision au démarrage.
-# Les workflows tournent alors directement dans le process principal,
-# ce qui convient parfaitement à un usage home/self-hosted.
-export N8N_RUNNERS_ENABLED=false
+# Dans n8n 2.x, les Task Runners sont obligatoires et le Task Broker
+# écoute par défaut sur 5679. On les laisse activés et on s'assure que
+# N8N_PORT (5680) ne rentre pas en collision.
+# On fixe explicitement le port du broker pour le traçage.
+export N8N_RUNNERS_ENABLED=true
+export N8N_RUNNERS_MODE=internal
+export N8N_RUNNERS_BROKER_PORT=5679
+export N8N_RUNNERS_BROKER_LISTEN_ADDRESS=127.0.0.1

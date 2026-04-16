@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.16.1.6 — 2026-04-16
+
+- Fix (vraie solution Task Broker) : dans n8n 2.x les Task Runners sont
+  obligatoires et le Task Broker écoute sur 5679. On déplace n8n sur
+  le port 5680 et on laisse le broker sur 5679 pour éviter la collision.
+- nginx.conf : upstream pointé sur `127.0.0.1:5680`.
+- N8N_RUNNERS_ENABLED reste `true` (conforme à n8n 2.x), on fixe
+  explicitement `N8N_RUNNERS_BROKER_PORT=5679` et
+  `N8N_RUNNERS_BROKER_LISTEN_ADDRESS=127.0.0.1`.
+
 ## 2.16.1.5 — 2026-04-16
 
 - Fix : désactivation des Task Runners (`N8N_RUNNERS_ENABLED=false`)

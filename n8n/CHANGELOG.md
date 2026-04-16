@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.16.1.7 — 2026-04-16
+
+- **Python Task Runner** désormais fonctionnel en mode `internal` :
+  - Base image basculée sur `python:3.13-slim` (version Python requise par
+    le runner).
+  - Node.js 22 installé via NodeSource par-dessus.
+  - Source du runner Python récupérée depuis le tag `n8n@${N8N_VERSION}`
+    et provisionnée à l'emplacement attendu par n8n :
+    `/usr/local/lib/node_modules/@n8n/task-runner-python/.venv/bin/python`.
+  - Venv avec `websockets>=15.0.1` comme seule dépendance.
+  - `N8N_RUNNERS_STDLIB_ALLOW=*` → toute la stdlib Python accessible aux
+    workflows.
+- Nettoyage des env vars dépréciées : `N8N_RUNNERS_ENABLED` et
+  `EXECUTIONS_PROCESS` supprimées.
+- **aarch64 temporairement désactivé** dans `config.yaml`, `build.yaml`
+  et la matrice GitHub Actions. Seul `amd64` est publié tant que la
+  situation n'évolue pas.
+- README.md traduit en anglais (public cible GitHub international).
+
 ## 2.16.1.6 — 2026-04-16
 
 - Fix (vraie solution Task Broker) : dans n8n 2.x les Task Runners sont

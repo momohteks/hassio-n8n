@@ -1,7 +1,8 @@
-# Base : node:22-slim (Debian, glibc) — compatible avec les prebuilds natifs
-# (isolated-vm, sqlite3, etc.) pour amd64 ET arm64
+# Base : python:3.13-slim (Debian, glibc)
+# - Python 3.13 requis par le Python Task Runner de n8n 2.x
+# - glibc → compatible avec les prebuilds natifs n8n (isolated-vm, sqlite3, etc.)
 ARG N8N_VERSION=2.16.1
-FROM node:22-slim
+FROM python:3.13-slim
 
 ARG N8N_VERSION
 
@@ -11,17 +12,50 @@ LABEL \
     io.hass.type="addon" \
     io.hass.version="${N8N_VERSION}"
 
-# Étape 1 : installer les build deps + n8n + retirer les build deps
-# (séparé du runtime pour que --auto-remove ne supprime pas supervisor/nginx)
+# ---------------------------------------------------------------------------
+# Étape 1 — Installer Node.js 22, build deps, n8n, Python Task Runner
+# ---------------------------------------------------------------------------
+# Le Python Task Runner (interne mode) est attendu par n8n à l'emplacement
+# /usr/local/lib/node_modules/@n8n/task-runner-python/.venv/bin/python
+# (path résolu depuis __dirname du CLI n8n + ../../../@n8n/task-runner-python).
+# On clone la source du runner depuis le tag n8n@${N8N_VERSION} puis on
+# provisionne un venv Python 3.13 avec la seule dépendance : websockets.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        python3 make g++ git ca-certificates \
+        curl \
+        ca-certificates \
+        gnupg \
+        python3-venv \
+        python3-dev \
+        make \
+        g++ \
+        git \
+    # Node.js 22 depuis NodeSource
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    # n8n via npm
     && npm install -g --omit=dev --unsafe-perm n8n@${N8N_VERSION} \
     && npm cache clean --force \
-    && apt-get purge -y --auto-remove python3 make g++ git \
+    # Python Task Runner : récupération de la source au bon tag
+    && git clone --depth 1 --branch "n8n@${N8N_VERSION}" \
+           https://github.com/n8n-io/n8n.git /tmp/n8n-src \
+       || git clone --depth 1 https://github.com/n8n-io/n8n.git /tmp/n8n-src \
+    && mkdir -p /usr/local/lib/node_modules/@n8n/task-runner-python \
+    && cp -r /tmp/n8n-src/packages/@n8n/task-runner-python/src \
+             /tmp/n8n-src/packages/@n8n/task-runner-python/pyproject.toml \
+             /usr/local/lib/node_modules/@n8n/task-runner-python/ \
+    # Venv avec la Python 3.13 native du base image
+    && python3 -m venv /usr/local/lib/node_modules/@n8n/task-runner-python/.venv \
+    && /usr/local/lib/node_modules/@n8n/task-runner-python/.venv/bin/pip \
+           install --no-cache-dir "websockets>=15.0.1" \
+    # Nettoyage build deps (on ne peut PAS purger python3-venv/dev car le venv en dépend)
+    && rm -rf /tmp/n8n-src \
+    && apt-get purge -y --auto-remove make g++ git gnupg python3-dev \
     && rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm /root/.cache
 
-# Étape 2 : installer les dépendances runtime qui doivent rester dans l'image
+# ---------------------------------------------------------------------------
+# Étape 2 — Dépendances runtime (nginx, supervisor, etc.)
+# ---------------------------------------------------------------------------
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
@@ -32,11 +66,17 @@ RUN apt-get update \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Créer l'utilisateur node et préparer les répertoires
-RUN mkdir -p /data \
+# ---------------------------------------------------------------------------
+# Utilisateur non-root pour n8n (l'image python:3.13-slim ne l'a pas)
+# ---------------------------------------------------------------------------
+RUN groupadd -g 1000 node \
+    && useradd -u 1000 -g node -m -s /bin/bash node \
+    && mkdir -p /data \
     && chown -R node:node /data
 
-# Copier les fichiers de configuration
+# ---------------------------------------------------------------------------
+# Configs + entrypoint
+# ---------------------------------------------------------------------------
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY n8n-exports.sh /n8n-exports.sh

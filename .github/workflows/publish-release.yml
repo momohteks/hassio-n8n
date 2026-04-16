@@ -24,8 +24,7 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
-          - arch: aarch64
-            platform: linux/arm64
+          # aarch64 temporairement désactivé — voir n8n/config.yaml et CLAUDE.md
 
     steps:
       - name: Checkout du repo
@@ -120,7 +119,8 @@ jobs:
             | Architecture | Tag complet | Tag n8n (flottant) |
             |---|---|---|
             | amd64 | `ghcr.io/momohteks/hassio-n8n-amd64:${{ steps.version.outputs.full }}` | `...:${{ steps.version.outputs.n8n }}` |
-            | aarch64 | `ghcr.io/momohteks/hassio-n8n-aarch64:${{ steps.version.outputs.full }}` | `...:${{ steps.version.outputs.n8n }}` |
+
+            > aarch64 temporairement désactivé.
 
             ### Installation
 

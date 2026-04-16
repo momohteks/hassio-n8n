@@ -33,22 +33,28 @@ export N8N_HIRING_BANNER_ENABLED=false
 export N8N_PERSONALIZATION_ENABLED=false
 export N8N_VERSION_NOTIFICATIONS_ENABLED=false
 export N8N_DIAGNOSTICS_ENABLED=false
-export N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false
 
 # Logs
 export N8N_LOG_LEVEL=info
 export N8N_LOG_OUTPUT=console
 
-# Exécuteurs
+# Exécutions
 export EXECUTIONS_MODE=regular
-export EXECUTIONS_PROCESS=main
 
+# ---------------------------------------------------------------------------
 # Task Runners (n8n 2.x)
-# Dans n8n 2.x, les Task Runners sont obligatoires et le Task Broker
-# écoute par défaut sur 5679. On les laisse activés et on s'assure que
-# N8N_PORT (5680) ne rentre pas en collision.
-# On fixe explicitement le port du broker pour le traçage.
-export N8N_RUNNERS_ENABLED=true
+# ---------------------------------------------------------------------------
+# En n8n 2.x les Task Runners sont obligatoires. Mode `internal` = n8n
+# démarre lui-même les processus runner (JS + Python). Le Task Broker
+# écoute sur 5679 (séparé de N8N_PORT pour éviter la collision).
 export N8N_RUNNERS_MODE=internal
 export N8N_RUNNERS_BROKER_PORT=5679
 export N8N_RUNNERS_BROKER_LISTEN_ADDRESS=127.0.0.1
+
+# Python Task Runner — quels modules le code utilisateur peut importer.
+# - STDLIB_ALLOW=*  → toute la stdlib Python est accessible
+# - EXTERNAL_ALLOW=(vide) → aucun paquet tiers accessible au code user
+#   (seul `websockets` est installé dans le venv, utilisé en interne
+#    par le runner lui-même mais bloqué pour le code utilisateur)
+export N8N_RUNNERS_STDLIB_ALLOW="*"
+export N8N_RUNNERS_EXTERNAL_ALLOW=""

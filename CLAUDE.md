@@ -101,43 +101,24 @@ docker run -p 5678:5678 -p 8081:8081 -v $(pwd)/data:/data hassio-n8n-test
   Pour réactiver : rétablir `aarch64` dans `n8n/config.yaml` + `n8n/build.yaml`
   et la ligne correspondante dans la matrice `.github/workflows/publish-release.yml`.
 
-## TODO — Prochain build
-
-### 1. Ajouter l'icône n8n à l'addon
-
-L'addon apparaît actuellement sans icône dans la liste des modules HA.
-
-Actions :
-- Ajouter `n8n/icon.png` (carré, 128×128 recommandé) — logo officiel n8n
-- Optionnel : ajouter `n8n/logo.png` (horizontal, pour la page de l'addon)
-- HA les détecte automatiquement, rien à déclarer dans `config.yaml`
-
-### 2. Corriger la page blanche de l'UI n8n via Ingress HA
-
-**Symptôme** : après démarrage réussi (logs OK, n8n UP sur 5680), accéder
-à l'addon depuis HA affiche une page blanche. L'URL est du type
-`https://<host>/bace4c61_n8n/` (préfixe Ingress dynamique).
-
-**Cause probable** : n8n génère des URL absolues pour ses assets
-(`/assets/...`, `/rest/...`) qui ne tiennent pas compte du préfixe Ingress.
-Le navigateur résout donc `https://<host>/assets/...` au lieu de
-`https://<host>/bace4c61_n8n/assets/...` → 404 → page blanche.
-
-**Pistes de fix** :
-- **Option A** : `sub_filter` nginx pour réécrire les URL dans les réponses
-  HTML/JS en injectant `$http_x_ingress_path`. Fragile mais local.
-- **Option B** : variable `N8N_PATH` ou `N8N_EDITOR_BASE_URL` côté n8n —
-  mais le préfixe Ingress est dynamique par install HA, pas hardcodable.
-- **Option C** : lire `X-Ingress-Path` au démarrage dans `run.sh` et
-  l'injecter dans `N8N_PATH` — non, ce header est par requête, pas fixe.
-- **Option D (recommandée à tester)** : utiliser l'Ingress en mode
-  "session" + vérifier si n8n supporte `X-Forwarded-Prefix` en natif
-  pour générer les bons assets. Regarder comment d'autres addons HA
-  node-based gèrent ce cas (Portainer, Code-Server, etc.).
-
-**Référence** : HA Ingress transmet `X-Ingress-Path` à chaque requête.
-
 ## Historique des fixes appliqués (pour référence)
+
+### v2.16.1.9 — Icône addon + fix Ingress UI
+
+- **Icône** : `n8n/icon.png` (180×180 depuis `apple-touch-icon.png` de
+  n8n.io) + `n8n/logo.png` (horizontal depuis `n8n-io/n8n/assets/`).
+- **Page blanche Ingress** résolue via `sub_filter` nginx sur le port
+  5678. Le préfixe dynamique HA (`$http_x_ingress_path`) est injecté :
+  - Attributs HTML (`href`, `src`, `action`).
+  - Chemins absolus dans les bundles JS/JSON (`/rest/`, `/assets/`,
+    `/webhook/`, `/webhook-test/`, `/webhook-waiting/`, `/types/`,
+    `/static/`, `/push`, `/form/`).
+  - Balise `<base href="$prefix/">` injectée dans `<head>` pour les
+    URLs relatives.
+  - Compression amont désactivée (`Accept-Encoding ""`) pour que
+    `sub_filter` puisse opérer sur les réponses en clair.
+  - `Content-Security-Policy` masqué pour ne pas bloquer la réécriture.
+  - Map `$connection_upgrade` pour un handling WebSocket propre.
 
 ### v2.16.1.7 — Python Task Runner + désactivation aarch64
 

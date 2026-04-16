@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.16.1.5 — 2026-04-16
+
+- Fix : désactivation des Task Runners (`N8N_RUNNERS_ENABLED=false`)
+  Le Task Broker interne de n8n 2.x tentait de se lier au port 5679
+  déjà utilisé par le process n8n principal → collision au démarrage
+  (`n8n Task Broker's port 5679 is already in use`).
+  Les workflows s'exécutent désormais dans le process main (comportement
+  n8n 1.x), ce qui convient à un usage home/self-hosted.
+
 ## 2.16.1.4 — 2026-04-15
 
 - Fix : `chown /data` au runtime pour que n8n (user `node`) puisse écrire

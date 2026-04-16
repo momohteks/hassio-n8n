@@ -40,3 +40,10 @@ export N8N_LOG_OUTPUT=console
 # Exécuteurs
 export EXECUTIONS_MODE=regular
 export EXECUTIONS_PROCESS=main
+
+# Task Runners (n8n 2.x)
+# Désactivés : le Task Broker interne tentait sinon de se lier au même port
+# que N8N_PORT (5679) et provoquait une collision au démarrage.
+# Les workflows tournent alors directement dans le process principal,
+# ce qui convient parfaitement à un usage home/self-hosted.
+export N8N_RUNNERS_ENABLED=false

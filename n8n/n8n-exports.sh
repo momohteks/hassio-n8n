@@ -12,6 +12,21 @@ export N8N_PORT=5680
 export N8N_PROTOCOL=http
 export N8N_HOST=0.0.0.0
 
+# ---------------------------------------------------------------------------
+# Sous-chemin (N8N_PATH) — résolution du problème "page blanche via Ingress"
+# ---------------------------------------------------------------------------
+# HA Ingress sert l'addon sous un préfixe dynamique (ex. /bace4c61_n8n/)
+# que nous ne connaissons qu'au runtime via le header X-Ingress-Path.
+# n8n, lui, doit recevoir un préfixe FIXE au démarrage (il l'injecte dans
+# tous les bundles Vite en remplaçant le placeholder /{{BASE_PATH}}/).
+#
+# Stratégie : on lui fait croire qu'il est servi sous /hassio-n8n-prefix/
+# (marqueur statique), puis nginx réécrit à la volée dans les réponses
+# /hassio-n8n-prefix/ -> $http_x_ingress_path/ (= vrai préfixe côté browser).
+# Côté requêtes entrantes, nginx réajoute /hassio-n8n-prefix/ avant de
+# proxyfier vers n8n, puisque HA Ingress strippe son préfixe.
+export N8N_PATH=/hassio-n8n-prefix/
+
 # Dossier de données persistées (volume HA /data)
 export N8N_USER_FOLDER=/data
 

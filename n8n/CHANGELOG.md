@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.16.1.10 — 2026-04-17
+
+- **Ingress UI connectivity fix** (real solution): the previous
+  `sub_filter`-per-path approach in 2.16.1.9 missed URLs hidden inside
+  Vite-minified JS (template literals, computed concatenations), so
+  `GET /rest/settings` and `/assets/en-*.js` still hit the root domain
+  and returned 404 ("Error connecting to n8n").
+- Switched to n8n's native sub-path mechanism using a static placeholder:
+  - `N8N_PATH=/hassio-n8n-prefix/` — n8n replaces the Vite `{{BASE_PATH}}`
+    placeholder with this marker in every HTML/JS/CSS file at startup,
+    so **every** asset URL now carries it (including the ones
+    `sub_filter` was missing before).
+  - nginx `rewrite ^/(.*)$ /hassio-n8n-prefix/$1 break;` re-adds the
+    marker to every incoming request before proxying to n8n (HA Ingress
+    strips its dynamic prefix on the way in).
+  - A single `sub_filter '/hassio-n8n-prefix/' '$http_x_ingress_path/'`
+    rewrites the marker back to the real HA Ingress prefix in every
+    response, so the browser's fetches match what HA serves.
+  - `proxy_redirect /hassio-n8n-prefix/ $http_x_ingress_path/` handles
+    3xx Location headers the same way.
+- Removed all per-path sub_filters (`"/rest/"`, `"/assets/"`, etc.) —
+  one global marker rewrite replaces them all and is robust to JS
+  minification.
+- Public port 8081 (webhooks / REST API) also re-adds the static prefix
+  before proxying, so the backend routes match.
+
 ## 2.16.1.9 — 2026-04-17
 
 - **Addon icon**: added `n8n/icon.png` (180×180, sourced from n8n.io's

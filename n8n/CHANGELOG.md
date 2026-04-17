@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.16.1.14 — 2026-04-17
+
+- **"Could not fetch node types" on first workflow**. The UI loaded fine
+  after 2.16.1.13, but opening the node picker failed with dynamic-import
+  errors on `.mjs` chunks pointing at `/{{BASE_PATH}}/...`.
+- Root cause in n8n itself: `packages/cli/src/commands/start.ts` compiles
+  the frontend at startup with the regex
+  `/(index\.html)|.*\.(js|css)/` — which **does not match `.mjs`**. So
+  `.mjs` files ship with the raw Vite placeholder `/{{BASE_PATH}}/`
+  instead of the configured `N8N_PATH` value, and every dynamic import
+  hits the wrong URL.
+- Fix (nginx only, no n8n patch):
+  1. Added a second `sub_filter '/{{BASE_PATH}}/' '$ingress_prefix/';`
+     so the raw placeholder in `.mjs` bodies is rewritten in-flight to
+     the real ingress prefix (same treatment as the static marker).
+  2. Extended the `<head>`-injected JS shim to recognise the
+     `/{{BASE_PATH}}/` marker too (in addition to
+     `/hassio-n8n-prefix/`) when rewriting `fetch` / `XHR` / `WebSocket`
+     URLs — last-line defence for any chunk sub_filter misses.
+  - The shim builds the `/{{BASE_PATH}}/` string from concatenated
+    pieces so the new sub_filter doesn't rewrite the shim itself.
+
 ## 2.16.1.13 — 2026-04-17
 
 - **Hotfix**: 2.16.1.12 wouldn't boot — nginx aborted with

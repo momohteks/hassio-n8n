@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.16.1.12 — 2026-04-17
+
+- **Ingress UI fix (round 4) — three layers of defence**. The 2.16.1.11
+  narrow `sub_filter_types` list missed JS chunks that n8n's Express
+  serves as `text/javascript` (not `application/javascript`), so the
+  static marker `/hassio-n8n-prefix/` leaked straight into the browser
+  as `ERR_ABORTED 404`. Even with the MIME list fixed, an empty or
+  mismatched `X-Ingress-Path` header would still break rewriting on
+  setups where an external reverse proxy fronts HA.
+- Fixes:
+  1. **`sub_filter_types *;`** — rewrite the marker in every response
+     content type (`text/javascript`, `.mjs`, `.css`, `text/html`,
+     everything).
+  2. **`$ingress_prefix` map** with fallback chain:
+     `X-Forwarded-Prefix` (what the browser actually sees, set by
+     external reverse proxies) → `X-Ingress-Path` (HA Core native
+     Ingress) → empty.
+  3. **Runtime JS shim injected before `</head>`.** Runs after
+     `/static/base-path.js` (where n8n defines `window.BASE_PATH`, the
+     single source of truth for all its URL construction — Vue Router
+     history base, Axios `baseURL`, asset loaders, template fetches).
+     The shim:
+     - overrides `window.BASE_PATH` with a value derived from the real
+       runtime URL if base-path.js still held the raw marker (meaning
+       sub_filter missed it) or a bogus empty value;
+     - wraps `fetch` / `XMLHttpRequest.open` / `WebSocket` so any URL
+       still starting with the marker gets rewritten client-side —
+       last-line defence for chunks loaded after page init.
+- Access log now prints `ingress_prefix="…"` on every request, making
+  misconfigured proxy chains trivially diagnosable.
+
 ## 2.16.1.11 — 2026-04-17
 
 - **Ingress UI fix (round 3)**: 2.16.1.10 inverted the backend rewrite.

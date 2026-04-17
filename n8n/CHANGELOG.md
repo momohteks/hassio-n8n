@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.16.1.13 — 2026-04-17
+
+- **Hotfix**: 2.16.1.12 wouldn't boot — nginx aborted with
+  `invalid variable name in /etc/nginx/nginx.conf:124`. The JS shim
+  injected via `sub_filter` contained `/\/+$/` regexes, and nginx tried
+  to interpolate the `$/` as a variable reference.
+- Trailing-slash stripping is now done with a `while` loop instead of a
+  regex with an end-anchor, so the inlined JS no longer contains any
+  `$` characters.
+
 ## 2.16.1.12 — 2026-04-17
 
 - **Ingress UI fix (round 4) — three layers of defence**. The 2.16.1.11

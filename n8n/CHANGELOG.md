@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.16.1.15 — 2026-04-17
+
+- **Still "Could not fetch node types" after 2.16.1.14**. Root-cause
+  analysis found three weaknesses that could each cause the
+  `GET /types/nodes.json` request to hit the SPA fallback (HTML) instead
+  of the protected type route, breaking the Pinia `nodeTypes` store:
+  1. n8n uses express `compression()` middleware globally
+     (`abstract-server.ts:119`). Our `Accept-Encoding: ""` header didn't
+     reliably suppress it — some setups still gzipped responses, which
+     `sub_filter` cannot read. **Fix**: send `Accept-Encoding: identity`
+     explicitly, and enable nginx `gunzip on` as a safety net so nginx
+     transparently decodes any gzipped upstream body before sub_filter.
+  2. Default nginx proxy buffers (8 × 4k) are too small for n8n's
+     minified editor bundles (1-2 MB .mjs files). sub_filter still
+     works across streaming, but large buffers reduce the chance of
+     weird edge cases. **Fix**: `proxy_buffer_size 16k; proxy_buffers 16 16k;`.
+  3. The runtime JS shim fell back to `window.location.pathname` when
+     `window.BASE_PATH` looked unusable. If the user reloaded at a
+     deep URL (`/api/hassio_ingress/<token>/workflow/new`), the shim
+     used the whole pathname as the base, so
+     `BASE_PATH + "types/nodes.json"` resolved to
+     `/api/.../workflow/new/types/nodes.json` — SPA fallback, HTML,
+     retry loop exhausts, throws "Could not fetch node types".
+     **Fix**: the shim now pattern-matches HA's
+     `/api/hassio_ingress/<token>/` prefix from `pathname` and uses
+     just that as the base, regardless of how deep the SPA is.
+- Added `X-Ingress-Prefix` response header and a `console.log` of the
+  resolved `BASE_PATH` in the shim, so misconfiguration is visible from
+  the browser DevTools without having to read addon logs.
+
 ## 2.16.1.14 — 2026-04-17
 
 - **"Could not fetch node types" on first workflow**. The UI loaded fine

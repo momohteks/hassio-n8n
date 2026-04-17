@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.16.1.11 — 2026-04-17
+
+- **Ingress UI fix (round 3)**: 2.16.1.10 inverted the backend rewrite.
+  The console reported many `Failed to load module script: Expected
+  JavaScript but got text/html` errors, which is the SPA-fallback
+  signature — n8n's catch-all route returning `index.html` for paths it
+  couldn't match.
+- Root cause: n8n's Express server mounts **every** route at `/` (static
+  files, `/rest`, `/rest/push`, …) regardless of `N8N_PATH`. Verified
+  in `packages/cli/src/server.ts`:
+  - `this.app.use('/', express.static(staticCacheDir, cacheOptions));`
+  - `this.app.get('/\${this.restEndpoint}/...')`
+  - `push.setupPushHandler(restEndpoint, app);`
+  `N8N_PATH` only affects the `{{BASE_PATH}}` placeholder replacement
+  inside frontend bundles — it does not prefix backend routes.
+- Fix: removed the incoming `rewrite ^/(.*)$ /hassio-n8n-prefix/$1` from
+  both nginx server blocks (5678 Ingress + 8081 public). The proxy now
+  passes paths through unchanged, which matches n8n's root-mounted
+  routes. `N8N_PATH` + `sub_filter` still handle the frontend prefix
+  injection in the response body.
+
 ## 2.16.1.10 — 2026-04-17
 
 - **Ingress UI connectivity fix** (real solution): the previous

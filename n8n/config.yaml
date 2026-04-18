@@ -2,7 +2,7 @@ name: n8n
 # Format : {n8n_version}.{addon_build}
 # - 3 premiers chiffres = version n8n upstream
 # - 4ème chiffre = numéro de build addon (reset à 1 quand n8n est mis à jour)
-version: "2.16.1.15"
+version: "2.16.1.16"
 slug: n8n
 description: n8n — Workflow Automation Platform
 url: https://github.com/momohteks/hassio-n8n
@@ -12,13 +12,16 @@ arch:
 startup: application
 boot: auto
 ingress: true
-ingress_port: 5678
+ingress_port: 5690
+ingress_stream: true
+# Needed so the startup script can query /addons/self/info for the
+# real ingress_url — this replaces the old sub_filter-based prefix hack.
+hassio_api: true
+homeassistant_api: false
 ports:
   8081/tcp: 8081
 ports_description:
   8081/tcp: Webhooks n8n et API REST
-hassio_api: false
-homeassistant_api: false
 map:
   - data:rw
 options:

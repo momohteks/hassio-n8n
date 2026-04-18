@@ -5,19 +5,25 @@
 Addon Home Assistant qui héberge une instance n8n via **nginx + supervisord**.
 Repo : https://github.com/momohteks/hassio-n8n
 
-## Architecture
+## Architecture (depuis 2.16.1.16)
 
 ```
-[HA Ingress] → nginx:5678  →  n8n:5680   (UI n8n)
+[HA Ingress] → nginx:5690  →  n8n:5680   (UI n8n, via ingress_stream + N8N_PATH)
 [Public]     → nginx:8081  →  n8n:5680   (webhooks & API)
                               Task Broker (interne n8n 2.x) → 5679
 ```
 
-- **nginx** écoute sur 5678 (Ingress HA) et 8081 (webhooks publics)
-- **n8n** tourne en interne sur le port 5680 (déplacé depuis 5679 pour éviter
-  la collision avec le Task Broker de n8n 2.x qui écoute sur 5679)
-- **supervisord** gère les deux processus (nginx + n8n)
-- Les données persistent dans `/data` (volume HA)
+- **nginx** = simple reverse proxy (5690 ingress + 8081 webhooks publics).
+  Aucun `sub_filter`, aucune réécriture d'URL, aucun shim JS.
+- **n8n** tourne en interne sur le port 5680 (5679 pris par le Task Broker).
+- **URL Ingress** : `run.sh` interroge au démarrage l'API Supervisor
+  `GET /addons/self/info` pour récupérer `ingress_url`, puis l'exporte comme
+  `N8N_PATH`. n8n remplace alors `/{{BASE_PATH}}/` par cette URL dans tous
+  ses fichiers `.css`/`.js`/`index.html`. `run.sh` fait le même remplacement
+  sur les fichiers `.mjs` (que le glob de n8n manque), avec une sauvegarde
+  `.hassio_orig` pour idempotence.
+- **supervisord** gère les deux processus (nginx + n8n).
+- Les données persistent dans `/data` (volume HA).
 
 ## Fichiers clés
 

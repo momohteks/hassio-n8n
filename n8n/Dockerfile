@@ -92,6 +92,6 @@ COPY run.sh /run.sh
 
 RUN chmod +x /n8n-exports.sh /run.sh
 
-EXPOSE 5678 8081
+EXPOSE 5690 8081
 
 CMD ["/run.sh"]

@@ -1,7 +1,22 @@
 #!/bin/bash
 set -e
 
-# Lire les options HA depuis /data/options.json
+# ---------------------------------------------------------------------------
+# run.sh — Addon entrypoint
+# ---------------------------------------------------------------------------
+# 1. Read HA addon options (/data/options.json)
+# 2. Resolve the real HA Ingress URL via the Supervisor API
+#    (/addons/self/info -> .data.ingress_url). This is the ONE thing that
+#    makes n8n's frontend assets work behind HA Ingress: n8n replaces the
+#    /{{BASE_PATH}}/ placeholder in its .js/.css/.html bundles with this
+#    path at startup, so the browser requests match what HA serves.
+# 3. Pre-process the editor-ui dist so .mjs files — which n8n's native
+#    compile step misses (glob is '**/*.{css,js}') — also get their
+#    /{{BASE_PATH}}/ placeholder replaced.
+# 4. Hand off to supervisord (nginx + n8n).
+# ---------------------------------------------------------------------------
+
+# --- 1. Addon options ------------------------------------------------------
 if [ -f /data/options.json ]; then
     WEBHOOK_URL=$(jq -r '.webhook_url // ""' /data/options.json)
     TIMEZONE=$(jq -r '.timezone // "Europe/Paris"' /data/options.json)
@@ -9,20 +24,72 @@ else
     WEBHOOK_URL=""
     TIMEZONE="Europe/Paris"
 fi
-
 export WEBHOOK_URL
 export TIMEZONE
 
-echo "[INFO] Démarrage de l'addon n8n"
-echo "[INFO] Fuseau horaire : ${TIMEZONE}"
-if [ -n "${WEBHOOK_URL}" ]; then
-    echo "[INFO] Webhook URL : ${WEBHOOK_URL}"
+echo "[hassio-n8n] Timezone: ${TIMEZONE}"
+[ -n "${WEBHOOK_URL}" ] && echo "[hassio-n8n] Webhook URL: ${WEBHOOK_URL}"
+
+# --- 2. Ingress URL from Supervisor ---------------------------------------
+INGRESS_URL="/"
+if [ -n "${SUPERVISOR_TOKEN}" ]; then
+    ADDON_INFO=$(curl -fsS -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+                       http://supervisor/addons/self/info 2>/dev/null || echo '{}')
+    RESOLVED=$(echo "${ADDON_INFO}" | jq -r '.data.ingress_url // empty')
+    if [ -n "${RESOLVED}" ] && [ "${RESOLVED}" != "null" ]; then
+        INGRESS_URL="${RESOLVED}"
+    else
+        echo "[hassio-n8n] WARNING: could not resolve ingress_url from Supervisor, falling back to '/'"
+    fi
+else
+    echo "[hassio-n8n] WARNING: SUPERVISOR_TOKEN not set, falling back to '/'"
 fi
 
-# /data est monté par HA en root:root → donner la propriété à l'utilisateur node
-# (sinon n8n ne peut pas créer /data/.n8n)
+# Ensure trailing slash (n8n's replaceStream replaces '/{{BASE_PATH}}/'
+# — a trailing-slash-delimited marker — so N8N_PATH must also end with /)
+case "${INGRESS_URL}" in
+    */) ;;
+    *)  INGRESS_URL="${INGRESS_URL}/" ;;
+esac
+export N8N_PATH="${INGRESS_URL}"
+echo "[hassio-n8n] N8N_PATH: ${N8N_PATH}"
+
+# --- 3. Patch .mjs files in the editor-ui dist -----------------------------
+# n8n 2.x's start.ts compile step does:
+#   const files = await glob('**/*.{css,js}', { cwd: EDITOR_UI_DIST_DIR });
+# which misses .mjs chunks, so they ship with literal /{{BASE_PATH}}/
+# placeholders and every dynamic import under the ingress prefix 404s
+# (the "Could not fetch node types" error). We do the same replacement
+# ourselves on .mjs files. Backup each file on first run so the patch is
+# idempotent across restarts (ingress token is stable but we don't rely
+# on it).
+EDITOR_DIST="$(npm root -g 2>/dev/null)/n8n/node_modules/n8n-editor-ui/dist"
+if [ ! -d "${EDITOR_DIST}" ]; then
+    # Fallback: resolve it the same way n8n does
+    EDITOR_DIST="$(node -e "try{process.stdout.write(require('path').join(require('path').dirname(require.resolve('n8n-editor-ui')), 'dist'))}catch(e){}" 2>/dev/null)"
+fi
+
+if [ -n "${EDITOR_DIST}" ] && [ -d "${EDITOR_DIST}" ]; then
+    echo "[hassio-n8n] Patching .mjs files under ${EDITOR_DIST}"
+    count=0
+    while IFS= read -r -d '' f; do
+        [ -z "$f" ] && continue
+        if [ ! -f "${f}.hassio_orig" ]; then
+            cp -p "$f" "${f}.hassio_orig"
+        fi
+        cp -p "${f}.hassio_orig" "$f"
+        # Use a non-/ delimiter since N8N_PATH contains slashes
+        sed -i "s|/{{BASE_PATH}}/|${N8N_PATH}|g" "$f"
+        count=$((count + 1))
+    done < <(find "${EDITOR_DIST}" -type f -name "*.mjs" -print0)
+    echo "[hassio-n8n] Patched ${count} .mjs files"
+else
+    echo "[hassio-n8n] WARNING: editor-ui dist dir not found — .mjs files will not be patched"
+fi
+
+# --- 4. Prepare /data and hand off to supervisord -------------------------
+# HA mounts /data as root:root at runtime (overriding the Dockerfile chown)
 chown -R node:node /data
 chmod 755 /data
 
-# Lancer supervisord (gère nginx + n8n)
 exec supervisord -c /etc/supervisor/conf.d/supervisord.conf

@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.16.1.16 — 2026-04-18
+
+- **Full architecture rewrite** of the HA Ingress integration. Abandoned
+  the static-marker + `sub_filter` + runtime JS shim approach (2.16.1.9
+  through 2.16.1.15) — it kept losing whack-a-mole against edge cases
+  (compression, `.mjs` chunks, deep-reload URLs). Inspired by
+  [Rbillon59/hass-n8n](https://github.com/Rbillon59/hass-n8n).
+- New approach:
+  1. `hassio_api: true` + `ingress_stream: true` in `config.yaml`.
+  2. On startup, `run.sh` calls the HA Supervisor endpoint
+     `GET /addons/self/info` and reads `.data.ingress_url`. That URL is
+     exported as `N8N_PATH` before n8n starts.
+  3. n8n's native startup compile step then replaces the
+     `/{{BASE_PATH}}/` placeholder in every `.css`/`.js`/`index.html`
+     file with the real ingress URL — so the frontend bundles are
+     already correct by the time the browser loads them.
+  4. `run.sh` also runs the same `sed` replacement on every `.mjs`
+     file under the editor-ui dist (keeping a `.hassio_orig` backup
+     for idempotency). n8n's own compile step misses `.mjs` files
+     because its glob is `'**/*.{css,js}'` — this was the real root
+     cause of "Could not fetch node types".
+  5. nginx is now a **plain HTTP reverse proxy** — no `sub_filter`, no
+     `gunzip`, no `gzip off`, no `X-Ingress-Path` mapping, no
+     `<head>`-injected JS shim. Just `proxy_pass` with WebSocket
+     upgrade headers.
+- Ingress port moved from 5678 → 5690 to match the upstream reference
+  setup and to keep the internal n8n port free.
+- `N8N_SECURE_COOKIE=false` — required since HA Ingress serves the UI
+  over plain HTTP inside the iframe, and `Secure` cookies would be
+  dropped by the browser.
+
 ## 2.16.1.15 — 2026-04-17
 
 - **Still "Could not fetch node types" after 2.16.1.14**. Root-cause

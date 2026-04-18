@@ -51,6 +51,17 @@ export N8N_LOG_OUTPUT=console
 export EXECUTIONS_MODE=regular
 
 # ---------------------------------------------------------------------------
+# Push backend — SSE instead of WebSocket
+# ---------------------------------------------------------------------------
+# The HA mobile app's WebView breaks the WebSocket upgrade through the
+# Ingress proxy chain (works fine in a regular mobile browser, fails in the
+# app → "Error connecting to n8n / Could not connect to server"). SSE uses
+# plain HTTP long-polling, which survives the WebView proxy layer. SSE
+# also works fine in desktop browsers, so this is a universal downgrade
+# with no regression on other clients.
+export N8N_PUSH_BACKEND=sse
+
+# ---------------------------------------------------------------------------
 # Task Runners (n8n 2.x — mandatory)
 # ---------------------------------------------------------------------------
 export N8N_RUNNERS_MODE=internal

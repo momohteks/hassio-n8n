@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.16.1.17 — 2026-04-18
+
+- **Fix: HA mobile app connection error.** The UI would load but
+  immediately show "Error connecting to n8n / Could not connect to
+  server" inside the Home Assistant mobile app (both on LAN Wi-Fi and
+  5G), while working fine in regular mobile browsers. Root cause: the
+  mobile app's WebView breaks the WebSocket upgrade used by n8n's push
+  channel when it goes through the Ingress proxy chain.
+- Switched the push backend from WebSocket to SSE via
+  `N8N_PUSH_BACKEND=sse` in `n8n-exports.sh`. SSE uses plain HTTP
+  long-polling, which survives the WebView proxy layer. SSE is also
+  fully supported in desktop browsers, so this is a universal change
+  with no regression on any other client.
+
 ## 2.16.1.16 — 2026-04-18
 
 - **Full architecture rewrite** of the HA Ingress integration. Abandoned

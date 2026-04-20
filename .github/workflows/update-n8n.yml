@@ -26,7 +26,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT so the tag push triggers publish-release.yml.
+          # GITHUB_TOKEN-driven pushes are intentionally blocked from
+          # triggering other workflows (anti-loop protection).
+          token: ${{ secrets.RELEASE_PAT }}
           fetch-depth: 0
 
       - name: Lire la version actuelle

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.16.2.1 — 2026-04-20
+
+- Nouvelle version n8n : 2.16.1 → 2.16.2
+
+
 ## 2.16.1.17 — 2026-04-18
 
 - **Fix: HA mobile app connection error.** The UI would load but

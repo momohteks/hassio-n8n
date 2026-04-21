@@ -1,26 +1,34 @@
 <script>
 /* hassio-n8n debug telemetry — injected by run.sh at startup.
-   Captures JS errors, unhandled rejections, and every fetch/XHR call,
-   then beacons them back to nginx (/__hassio_debug) so they show up in
-   the addon log. Used to diagnose client-side failures (e.g. inside the
-   Home Assistant mobile app's WebView) without needing USB debug. */
+   Android WebView inside the HA companion app silently drops
+   sendBeacon() calls after the first one. So we always use
+   `new Image().src` (GET) and serialise sends through a small
+   queue (50ms gap) to avoid any coalescing/dropping. */
 (function () {
   var BASE = (function () {
     var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
     return m ? m[1] : '/';
   })();
+  var Q = [];
+  var draining = false;
+  function drain() {
+    if (!Q.length) { draining = false; return; }
+    draining = true;
+    var u = Q.shift();
+    try {
+      var i = new Image();
+      i.src = u;
+    } catch (e) { /* swallow */ }
+    setTimeout(drain, 50);
+  }
   function send(o) {
     try {
       var q = Object.keys(o).map(function (k) {
         return k + '=' + encodeURIComponent(String(o[k]).slice(0, 800));
       }).join('&');
-      var u = BASE + '__hassio_debug?' + q;
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(u);
-      } else {
-        var i = new Image();
-        i.src = u;
-      }
+      var u = BASE + '__hassio_debug?' + q + '&_=' + Date.now() + Math.random();
+      Q.push(u);
+      if (!draining) drain();
     } catch (e) { /* swallow */ }
   }
   function baseHref() {
@@ -28,6 +36,14 @@
       var b = document.querySelector('base');
       return (b && b.getAttribute('href')) || '';
     } catch (e) { return ''; }
+  }
+  function snap(ev) {
+    send({
+      ev: ev,
+      BP: (typeof window.BASE_PATH !== 'undefined') ? String(window.BASE_PATH) : '__undef__',
+      bURI: document.baseURI || '',
+      base: baseHref()
+    });
   }
   send({
     ev: 'boot',
@@ -40,16 +56,13 @@
     base: baseHref(),
     ingress: BASE
   });
-  // Re-sample after DOMContentLoaded: <base> and window.BASE_PATH may be set
-  // by inline scripts after our injected snippet runs.
-  document.addEventListener('DOMContentLoaded', function () {
-    send({
-      ev: 'boot2',
-      BP: (typeof window.BASE_PATH !== 'undefined') ? String(window.BASE_PATH) : '__undef__',
-      bURI: document.baseURI || '',
-      base: baseHref()
-    });
-  });
+  document.addEventListener('DOMContentLoaded', function () { snap('boot2'); });
+  window.addEventListener('load', function () { snap('boot3'); });
+  // And a 2-second delayed snapshot, in case BASE_PATH is set asynchronously
+  // after the main bundle mounts.
+  setTimeout(function () { snap('boot4'); }, 2000);
+  setTimeout(function () { snap('boot5'); }, 5000);
+
   window.addEventListener('error', function (e) {
     send({
       ev: 'err',

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.16.2.4 — 2026-04-22
+
+- **Diagnostic transport fix.** v2.16.2.3 revealed that the Android
+  WebView inside the HA companion app silently drops every
+  `navigator.sendBeacon()` call after the first one — only the initial
+  `boot` event reached the server. Switch the debug telemetry to a
+  serialised `new Image().src` queue (50 ms between calls, with a
+  cache-buster query param) so every event lands. Add `boot3` on
+  `load`, and delayed `boot4`/`boot5` snapshots (2 s / 5 s after
+  boot) to catch any late-set `window.BASE_PATH`.
+
 ## 2.16.2.3 — 2026-04-22
 
 - **Enhanced diagnostic telemetry.** v2.16.2.2 confirmed the smoking gun:

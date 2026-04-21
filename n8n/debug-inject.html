@@ -23,12 +23,32 @@
       }
     } catch (e) { /* swallow */ }
   }
+  function baseHref() {
+    try {
+      var b = document.querySelector('base');
+      return (b && b.getAttribute('href')) || '';
+    } catch (e) { return ''; }
+  }
   send({
     ev: 'boot',
     ua: navigator.userAgent,
     href: location.href,
     ref: document.referrer || '',
-    cook: navigator.cookieEnabled ? 'y' : 'n'
+    cook: navigator.cookieEnabled ? 'y' : 'n',
+    BP: (typeof window.BASE_PATH !== 'undefined') ? String(window.BASE_PATH) : '__undef__',
+    bURI: document.baseURI || '',
+    base: baseHref(),
+    ingress: BASE
+  });
+  // Re-sample after DOMContentLoaded: <base> and window.BASE_PATH may be set
+  // by inline scripts after our injected snippet runs.
+  document.addEventListener('DOMContentLoaded', function () {
+    send({
+      ev: 'boot2',
+      BP: (typeof window.BASE_PATH !== 'undefined') ? String(window.BASE_PATH) : '__undef__',
+      bURI: document.baseURI || '',
+      base: baseHref()
+    });
   });
   window.addEventListener('error', function (e) {
     send({
@@ -55,7 +75,7 @@
       var method = (init && init.method) || 'GET';
       send({ ev: 'fs', u: url, m: method });
       return origFetch.apply(this, arguments).then(function (r) {
-        send({ ev: 'fd', u: url, s: r.status });
+        send({ ev: 'fd', u: url, s: r.status, ru: (r && r.url) || '' });
         return r;
       }, function (err) {
         send({ ev: 'ff', u: url, e: (err && err.message) || String(err) });
@@ -71,7 +91,7 @@
       var o = x.open;
       x.open = function (me, ur) { M = me; U = ur; return o.apply(x, arguments); };
       x.addEventListener('loadend', function () {
-        send({ ev: 'xe', u: U, m: M, s: x.status });
+        send({ ev: 'xe', u: U, m: M, s: x.status, ru: x.responseURL || '' });
       });
       x.addEventListener('error', function () {
         send({ ev: 'xr', u: U, m: M });

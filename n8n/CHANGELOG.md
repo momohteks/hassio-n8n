@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.16.2.3 — 2026-04-22
+
+- **Enhanced diagnostic telemetry.** v2.16.2.2 confirmed the smoking gun:
+  an XHR is made to `/rest/settings` without the ingress prefix, so it
+  resolves against the page origin (Home Assistant) and 404s before
+  reaching the addon's nginx. This build enriches the `[hassio-debug]`
+  telemetry to pinpoint the root cause:
+  - `boot` event now reports `BP` (`window.BASE_PATH`), `bURI`
+    (`document.baseURI`), and `base` (the `<base href>` attribute).
+  - A second `boot2` event is emitted on `DOMContentLoaded` to catch
+    late-initialised values.
+  - `fetch`/XHR events now include `ru` (`responseURL`) to see the
+    effective URL after resolution.
+  Still no functional change; this is purely observational.
+
 ## 2.16.2.2 — 2026-04-21
 
 - **Diagnostic build** for the HA mobile app connection error. Earlier

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.16.2.2 — 2026-04-21
+
+- **Diagnostic build** for the HA mobile app connection error. Earlier
+  investigation showed the UI loads 100 % of its assets but then never
+  issues any `/rest/*` call in the HA mobile app — failure is purely
+  client-side and invisible in the nginx access log. This build injects
+  a small JS telemetry snippet into `index.html` that hooks
+  `window.onerror`, `unhandledrejection`, `fetch()` and
+  `XMLHttpRequest`, then beacons each event to `/__hassio_debug`. An
+  nginx `log_format` prints the payload to the addon log prefixed with
+  `[hassio-debug]`. No functional change for clients that already work.
+
 ## 2.16.2.1 — 2026-04-20
 
 - Nouvelle version n8n : 2.16.1 → 2.16.2

@@ -1,0 +1,83 @@
+<script>
+/* hassio-n8n debug telemetry — injected by run.sh at startup.
+   Captures JS errors, unhandled rejections, and every fetch/XHR call,
+   then beacons them back to nginx (/__hassio_debug) so they show up in
+   the addon log. Used to diagnose client-side failures (e.g. inside the
+   Home Assistant mobile app's WebView) without needing USB debug. */
+(function () {
+  var BASE = (function () {
+    var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
+    return m ? m[1] : '/';
+  })();
+  function send(o) {
+    try {
+      var q = Object.keys(o).map(function (k) {
+        return k + '=' + encodeURIComponent(String(o[k]).slice(0, 800));
+      }).join('&');
+      var u = BASE + '__hassio_debug?' + q;
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(u);
+      } else {
+        var i = new Image();
+        i.src = u;
+      }
+    } catch (e) { /* swallow */ }
+  }
+  send({
+    ev: 'boot',
+    ua: navigator.userAgent,
+    href: location.href,
+    ref: document.referrer || '',
+    cook: navigator.cookieEnabled ? 'y' : 'n'
+  });
+  window.addEventListener('error', function (e) {
+    send({
+      ev: 'err',
+      msg: e.message || '',
+      src: e.filename || '',
+      line: e.lineno || 0,
+      col: e.colno || 0,
+      stack: (e.error && e.error.stack) || ''
+    });
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason || {};
+    send({
+      ev: 'rej',
+      msg: (r && r.message) || String(r) || '',
+      stack: (r && r.stack) || ''
+    });
+  });
+  var origFetch = window.fetch;
+  if (origFetch) {
+    window.fetch = function (input, init) {
+      var url = (typeof input === 'string') ? input : (input && input.url) || '';
+      var method = (init && init.method) || 'GET';
+      send({ ev: 'fs', u: url, m: method });
+      return origFetch.apply(this, arguments).then(function (r) {
+        send({ ev: 'fd', u: url, s: r.status });
+        return r;
+      }, function (err) {
+        send({ ev: 'ff', u: url, e: (err && err.message) || String(err) });
+        throw err;
+      });
+    };
+  }
+  var OX = window.XMLHttpRequest;
+  if (OX) {
+    window.XMLHttpRequest = function () {
+      var x = new OX();
+      var U = '', M = '';
+      var o = x.open;
+      x.open = function (me, ur) { M = me; U = ur; return o.apply(x, arguments); };
+      x.addEventListener('loadend', function () {
+        send({ ev: 'xe', u: U, m: M, s: x.status });
+      });
+      x.addEventListener('error', function () {
+        send({ ev: 'xr', u: U, m: M });
+      });
+      return x;
+    };
+  }
+})();
+</script>

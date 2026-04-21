@@ -87,6 +87,29 @@ else
     echo "[hassio-n8n] WARNING: editor-ui dist dir not found — .mjs files will not be patched"
 fi
 
+# --- 3b. Inject debug telemetry into index.html ---------------------------
+# Diagnostic build: the HA mobile app WebView loads all assets fine but
+# never issues any /rest/* call — the failure is client-side, invisible
+# in nginx logs. This injects a small JS snippet into index.html that
+# hooks window.onerror, unhandledrejection, fetch() and XMLHttpRequest,
+# and beacons each event to /__hassio_debug (handled by nginx). Results
+# show up in the addon log with the prefix "[hassio-debug]".
+# Idempotent across restarts via the .hassio_orig backup pattern.
+DEBUG_SNIPPET=/debug-inject.html
+INDEX_HTML="${EDITOR_DIST}/index.html"
+if [ -f "${INDEX_HTML}" ] && [ -f "${DEBUG_SNIPPET}" ]; then
+    if [ ! -f "${INDEX_HTML}.hassio_orig" ]; then
+        cp -p "${INDEX_HTML}" "${INDEX_HTML}.hassio_orig"
+    fi
+    cp -p "${INDEX_HTML}.hassio_orig" "${INDEX_HTML}"
+    # sed `r` inserts file contents AFTER the matched line. Works as long
+    # as <head> is on its own line (it is in n8n's built index.html).
+    sed -i "/<head[^>]*>/r ${DEBUG_SNIPPET}" "${INDEX_HTML}"
+    echo "[hassio-n8n] Injected debug telemetry into index.html"
+else
+    echo "[hassio-n8n] WARNING: index.html or debug snippet missing — telemetry NOT injected"
+fi
+
 # --- 4. Prepare /data and hand off to supervisord -------------------------
 # HA mounts /data as root:root at runtime (overriding the Dockerfile chown)
 chown -R node:node /data

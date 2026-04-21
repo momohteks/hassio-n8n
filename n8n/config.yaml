@@ -2,7 +2,7 @@ name: n8n
 # Format : {n8n_version}.{addon_build}
 # - 3 premiers chiffres = version n8n upstream
 # - 4ème chiffre = numéro de build addon (reset à 1 quand n8n est mis à jour)
-version: "2.16.2.1"
+version: "2.16.2.2"
 slug: n8n
 description: n8n — Workflow Automation Platform
 url: https://github.com/momohteks/hassio-n8n

@@ -106,6 +106,12 @@ if [ -f "${INDEX_HTML}" ] && [ -f "${DEBUG_SNIPPET}" ]; then
     # as <head> is on its own line (it is in n8n's built index.html).
     sed -i "/<head[^>]*>/r ${DEBUG_SNIPPET}" "${INDEX_HTML}"
     echo "[hassio-n8n] Injected debug telemetry into index.html"
+    # Dump every line of index.html that mentions BASE_PATH so we can
+    # see what n8n actually writes into the page at runtime.
+    echo "[hassio-n8n] index.html BASE_PATH references:"
+    grep -n "BASE_PATH" "${INDEX_HTML}" | head -20 | while read -r line; do
+        echo "[hassio-n8n]   ${line}"
+    done || true
 else
     echo "[hassio-n8n] WARNING: index.html or debug snippet missing — telemetry NOT injected"
 fi

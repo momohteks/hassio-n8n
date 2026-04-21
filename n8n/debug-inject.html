@@ -9,6 +9,38 @@
     var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
     return m ? m[1] : '/';
   })();
+
+  /* --- Force window.BASE_PATH to the ingress URL and prevent any
+     later code from setting it back to "/". Observed in the HA
+     Android companion WebView: n8n's own code sets BASE_PATH="/"
+     at DOMContentLoaded, causing every /rest/* XHR to resolve
+     against the page origin (HA) instead of the ingress-proxied
+     addon, returning 404. Regular browsers don't exhibit this.
+     Fix: install a getter/setter BEFORE any other script runs. */
+  if (BASE !== '/') {
+    try {
+      var _bp = BASE;
+      Object.defineProperty(window, 'BASE_PATH', {
+        configurable: true,
+        enumerable: true,
+        get: function () { return _bp; },
+        set: function (v) {
+          // Accept a replacement only if it's a non-empty path that
+          // isn't the useless "/". Everything else is ignored and
+          // reported for diagnostics.
+          if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
+            _bp = v;
+          } else {
+            try {
+              var q = 'ev=bp_set_ignored&v=' + encodeURIComponent(String(v));
+              var i = new Image(); i.src = BASE + '__hassio_debug?' + q + '&_=' + Date.now();
+            } catch (e) {}
+          }
+        }
+      });
+    } catch (e) {}
+  }
+
   var Q = [];
   var draining = false;
   function drain() {

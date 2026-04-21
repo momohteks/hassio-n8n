@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.16.2.5 — 2026-04-22
+
+- **Fix HA mobile app "Error connecting to n8n".** v2.16.2.4's
+  telemetry confirmed the root cause: inside the Home Assistant
+  Android companion app's WebView, n8n's own startup code sets
+  `window.BASE_PATH = "/"` at DOMContentLoaded (ignoring the
+  ingress-prefixed value baked into the bundles). Every `/rest/*`
+  XHR then resolves against the page origin (HA) instead of the
+  ingress-proxied addon and returns 404 — hence the error screen.
+  Regular browsers don't exhibit this behaviour.
+
+  Fix: the injected telemetry snippet now installs a
+  getter/setter on `window.BASE_PATH` **before any other script
+  runs**, pinning it to the ingress URL extracted from
+  `location.pathname`. Subsequent attempts to set it to `"/"` are
+  silently rejected; any richer value is accepted.
+
+  Also: `run.sh` now logs every `BASE_PATH` reference it finds in
+  the patched `index.html`, so we can see what n8n actually writes.
+
 ## 2.16.2.4 — 2026-04-22
 
 - **Diagnostic transport fix.** v2.16.2.3 revealed that the Android

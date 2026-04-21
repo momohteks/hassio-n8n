@@ -87,33 +87,28 @@ else
     echo "[hassio-n8n] WARNING: editor-ui dist dir not found — .mjs files will not be patched"
 fi
 
-# --- 3b. Inject debug telemetry into index.html ---------------------------
-# Diagnostic build: the HA mobile app WebView loads all assets fine but
-# never issues any /rest/* call — the failure is client-side, invisible
-# in nginx logs. This injects a small JS snippet into index.html that
-# hooks window.onerror, unhandledrejection, fetch() and XMLHttpRequest,
-# and beacons each event to /__hassio_debug (handled by nginx). Results
-# show up in the addon log with the prefix "[hassio-debug]".
+# --- 3b. Inject window.BASE_PATH shim into index.html ---------------------
+# In the Home Assistant Android companion WebView, n8n's own
+# /static/base-path.js sets window.BASE_PATH = "/" at DOMContentLoaded
+# instead of the real ingress prefix, so every /rest/* XHR 404s and the
+# user sees "Error connecting to n8n". Regular browsers are unaffected.
+# Fix: inject a small <script> into <head> that installs a getter/setter
+# on window.BASE_PATH before any n8n script runs, pinning the value to
+# the ingress prefix parsed from location.pathname. See base-path-fix.html.
 # Idempotent across restarts via the .hassio_orig backup pattern.
-DEBUG_SNIPPET=/debug-inject.html
+BASE_PATH_FIX=/base-path-fix.html
 INDEX_HTML="${EDITOR_DIST}/index.html"
-if [ -f "${INDEX_HTML}" ] && [ -f "${DEBUG_SNIPPET}" ]; then
+if [ -f "${INDEX_HTML}" ] && [ -f "${BASE_PATH_FIX}" ]; then
     if [ ! -f "${INDEX_HTML}.hassio_orig" ]; then
         cp -p "${INDEX_HTML}" "${INDEX_HTML}.hassio_orig"
     fi
     cp -p "${INDEX_HTML}.hassio_orig" "${INDEX_HTML}"
     # sed `r` inserts file contents AFTER the matched line. Works as long
     # as <head> is on its own line (it is in n8n's built index.html).
-    sed -i "/<head[^>]*>/r ${DEBUG_SNIPPET}" "${INDEX_HTML}"
-    echo "[hassio-n8n] Injected debug telemetry into index.html"
-    # Dump every line of index.html that mentions BASE_PATH so we can
-    # see what n8n actually writes into the page at runtime.
-    echo "[hassio-n8n] index.html BASE_PATH references:"
-    grep -n "BASE_PATH" "${INDEX_HTML}" | head -20 | while read -r line; do
-        echo "[hassio-n8n]   ${line}"
-    done || true
+    sed -i "/<head[^>]*>/r ${BASE_PATH_FIX}" "${INDEX_HTML}"
+    echo "[hassio-n8n] Injected window.BASE_PATH shim into index.html"
 else
-    echo "[hassio-n8n] WARNING: index.html or debug snippet missing — telemetry NOT injected"
+    echo "[hassio-n8n] WARNING: index.html or base-path-fix.html missing — shim NOT injected"
 fi
 
 # --- 4. Prepare /data and hand off to supervisord -------------------------

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.16.2.6 — 2026-04-22
+
+- **Production cleanup of the HA mobile app `BASE_PATH` fix.** The
+  shim validated in v2.16.2.5 works — every `/rest/*` XHR now resolves
+  against the correct ingress prefix and the app loads normally inside
+  the Home Assistant Android companion. This build strips all the
+  diagnostic scaffolding that surrounded the fix:
+  - `debug-inject.html` renamed to `base-path-fix.html` and reduced
+    to the `window.BASE_PATH` getter/setter shim only (~25 lines).
+    The `Image()`-queue transport, `boot`/`boot2`…`boot5` snapshots,
+    `window.onerror`, `unhandledrejection`, `fetch()` and
+    `XMLHttpRequest` hooks are all gone.
+  - `/__hassio_debug` sink and the `hassio_debug` log format removed
+    from `nginx.conf`.
+  - `run.sh` no longer dumps `BASE_PATH` references from
+    `index.html`; injection logic is unchanged.
+  No behavioural change for users — same fix, no telemetry noise.
+
 ## 2.16.2.5 — 2026-04-22
 
 - **Fix HA mobile app "Error connecting to n8n".** v2.16.2.4's

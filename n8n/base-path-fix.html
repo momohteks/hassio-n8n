@@ -1,0 +1,38 @@
+<script>
+/* hassio-n8n — window.BASE_PATH shim for the HA mobile companion app.
+ *
+ * Why this exists:
+ * In the Home Assistant Android companion WebView, n8n's own
+ * /static/base-path.js sets window.BASE_PATH = "/" at DOMContentLoaded,
+ * instead of the real HA ingress prefix (/api/hassio_ingress/<token>/).
+ * Every subsequent /rest/* XHR then resolves against the page origin
+ * (Home Assistant itself) instead of the addon, yielding 404 and the
+ * "Error connecting to n8n" splash screen. Regular mobile/desktop
+ * browsers do not exhibit this.
+ *
+ * Fix: parse the ingress prefix from location.pathname and install a
+ * getter/setter on window.BASE_PATH BEFORE any other script runs,
+ * rejecting any later attempt to overwrite it with "/" or an empty
+ * value. Injected into <head> by run.sh at addon startup.
+ *
+ * This file is loaded only inside the HA Ingress iframe, never on the
+ * public webhooks/API port, so it cannot affect non-ingress traffic.
+ */
+(function () {
+  var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
+  if (!m) return;
+  var _bp = m[1];
+  try {
+    Object.defineProperty(window, 'BASE_PATH', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return _bp; },
+      set: function (v) {
+        if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
+          _bp = v;
+        }
+      }
+    });
+  } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
+})();
+</script>

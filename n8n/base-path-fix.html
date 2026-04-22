@@ -54,29 +54,49 @@
   }
 
   /* --- (2) Service Worker disable ------------------------------------- */
+  // Three layers:
+  //   (a) block any future .register() call (never-resolving promise)
+  //   (b) unregister every existing registration + purge CacheStorage
+  //   (c) if a SW is ALREADY controlling this page (navigator.serviceWorker
+  //       .controller != null), the unregister from (b) only takes effect
+  //       on the NEXT navigation — but the current page is still being
+  //       intercepted by the stale SW, which is exactly what corrupts
+  //       /rest/workflows/:id on subsequent loads. So we force ONE
+  //       location.reload() after unregister + cache purge complete,
+  //       guarded by sessionStorage to avoid a reload loop.
   try {
     if (navigator.serviceWorker) {
-      // Stop any future n8n script from registering a new SW. We return
-      // a promise that never resolves so callers don't crash on .then().
       navigator.serviceWorker.register = function () {
         return new Promise(function () { /* never resolves */ });
       };
-      // Unregister any SW left over from a previous addon version
-      // (stale ingress-token scope → cached 400/"1" responses).
-      if (typeof navigator.serviceWorker.getRegistrations === 'function') {
-        navigator.serviceWorker.getRegistrations().then(function (regs) {
-          for (var i = 0; i < regs.length; i++) {
-            try { regs[i].unregister(); } catch (e) {}
-          }
-        }).catch(function () { /* swallow */ });
-      }
-      // Also purge any CacheStorage the SW might have populated.
-      if (window.caches && typeof caches.keys === 'function') {
-        caches.keys().then(function (names) {
-          for (var i = 0; i < names.length; i++) {
-            try { caches.delete(names[i]); } catch (e) {}
-          }
-        }).catch(function () { /* swallow */ });
+
+      var hadController = !!navigator.serviceWorker.controller;
+      var alreadyReloaded = false;
+      try {
+        alreadyReloaded = sessionStorage.getItem('__hassio_n8n_sw_purged') === '1';
+      } catch (e) {}
+
+      var unregP = (typeof navigator.serviceWorker.getRegistrations === 'function')
+        ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) {
+              try { return r.unregister(); } catch (e) { return null; }
+            }));
+          }).catch(function () {})
+        : Promise.resolve();
+
+      var cacheP = (window.caches && typeof caches.keys === 'function')
+        ? caches.keys().then(function (names) {
+            return Promise.all(names.map(function (n) {
+              try { return caches.delete(n); } catch (e) { return null; }
+            }));
+          }).catch(function () {})
+        : Promise.resolve();
+
+      if (hadController && !alreadyReloaded) {
+        Promise.all([unregP, cacheP]).then(function () {
+          try { sessionStorage.setItem('__hassio_n8n_sw_purged', '1'); } catch (e) {}
+          location.reload();
+        });
       }
     }
   } catch (e) { /* swallow */ }

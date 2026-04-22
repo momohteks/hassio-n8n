@@ -1,7 +1,6 @@
 <script>
-/* hassio-n8n — client-side shims injected into <head> by run.sh.
+/* hassio-n8n — window.BASE_PATH shim (HA Android companion app fix).
  *
- * (1) window.BASE_PATH shim (HA mobile companion app)
  * In the Home Assistant Android companion WebView, n8n's own
  * /static/base-path.js sets window.BASE_PATH = "/" at DOMContentLoaded,
  * instead of the real HA ingress prefix (/api/hassio_ingress/<token>/).
@@ -15,90 +14,24 @@
  * rejecting any later attempt to overwrite it with "/" or an empty
  * value.
  *
- * (2) Service Worker disable (n8n 2.17+ caching breakage)
- * n8n 2.17 registers a Service Worker that intercepts /rest/* and
- * /types/* requests. Under HA Ingress, the SW scope is pinned to the
- * ingress path /api/hassio_ingress/<token>/, but the <token> is
- * regenerated on every addon restart. Old SWs then serve stale cache
- * entries for requests under the new token — observed symptom: the
- * first GET /rest/workflows/:id returns the real JSON (200), but every
- * subsequent one returns a stub "400 Bad Request" with body "1" and
- * Content-Type application/octet-stream ("(from service worker)" in
- * DevTools). The workflow store then clears, the Vue inject chain
- * cascades to undefined, and the editor shows an empty canvas.
- *
- * Fix: block navigator.serviceWorker.register() entirely and unregister
- * any SW that was installed by a previous addon version. Offline
- * caching is irrelevant behind HA Ingress anyway.
- *
  * This file is loaded only inside the HA Ingress iframe, never on the
  * public webhooks/API port, so it cannot affect non-ingress traffic.
  */
 (function () {
-  /* --- (1) BASE_PATH pin ---------------------------------------------- */
   var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
-  if (m) {
-    var _bp = m[1];
-    try {
-      Object.defineProperty(window, 'BASE_PATH', {
-        configurable: true,
-        enumerable: true,
-        get: function () { return _bp; },
-        set: function (v) {
-          if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
-            _bp = v;
-          }
-        }
-      });
-    } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
-  }
-
-  /* --- (2) Service Worker disable ------------------------------------- */
-  // Three layers:
-  //   (a) block any future .register() call (never-resolving promise)
-  //   (b) unregister every existing registration + purge CacheStorage
-  //   (c) if a SW is ALREADY controlling this page (navigator.serviceWorker
-  //       .controller != null), the unregister from (b) only takes effect
-  //       on the NEXT navigation — but the current page is still being
-  //       intercepted by the stale SW, which is exactly what corrupts
-  //       /rest/workflows/:id on subsequent loads. So we force ONE
-  //       location.reload() after unregister + cache purge complete,
-  //       guarded by sessionStorage to avoid a reload loop.
+  if (!m) return;
+  var _bp = m[1];
   try {
-    if (navigator.serviceWorker) {
-      navigator.serviceWorker.register = function () {
-        return new Promise(function () { /* never resolves */ });
-      };
-
-      var hadController = !!navigator.serviceWorker.controller;
-      var alreadyReloaded = false;
-      try {
-        alreadyReloaded = sessionStorage.getItem('__hassio_n8n_sw_purged') === '1';
-      } catch (e) {}
-
-      var unregP = (typeof navigator.serviceWorker.getRegistrations === 'function')
-        ? navigator.serviceWorker.getRegistrations().then(function (regs) {
-            return Promise.all(regs.map(function (r) {
-              try { return r.unregister(); } catch (e) { return null; }
-            }));
-          }).catch(function () {})
-        : Promise.resolve();
-
-      var cacheP = (window.caches && typeof caches.keys === 'function')
-        ? caches.keys().then(function (names) {
-            return Promise.all(names.map(function (n) {
-              try { return caches.delete(n); } catch (e) { return null; }
-            }));
-          }).catch(function () {})
-        : Promise.resolve();
-
-      if (hadController && !alreadyReloaded) {
-        Promise.all([unregP, cacheP]).then(function () {
-          try { sessionStorage.setItem('__hassio_n8n_sw_purged', '1'); } catch (e) {}
-          location.reload();
-        });
+    Object.defineProperty(window, 'BASE_PATH', {
+      configurable: true,
+      enumerable: true,
+      get: function () { return _bp; },
+      set: function (v) {
+        if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
+          _bp = v;
+        }
       }
-    }
-  } catch (e) { /* swallow */ }
+    });
+  } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
 })();
 </script>

@@ -1,47 +1,29 @@
 # Changelog
 
-## 2.17.3.3 — 2026-04-23
+## 2.17.3.4 — 2026-04-23
 
-- **Follow-up fix: blank-canvas bug still triggered after 2.17.3.2.**
-  The client-side `navigator.serviceWorker.register` override from
-  2.17.3.2 blocked *new* registrations, but any Service Worker already
-  installed in the browser from a previous addon version was still
-  **controlling the page on load** (`navigator.serviceWorker.controller
-  != null`). Its stale fetch handler kept intercepting `/rest/*` and
-  returning the corrupt `400 "1"` stub before our unregister call —
-  which is async and only takes effect on the *next* navigation —
-  could disarm it.
-- **`base-path-fix.html`**: when a SW is already controlling the page,
-  wait for the unregister + CacheStorage purge to complete, then force
-  a single `location.reload()`. Guarded by `sessionStorage` so it runs
-  once per tab and never loops. After the reload the page boots with
-  `controller === null` and hits nginx directly.
-- **`nginx.conf` (port 5690)**: added a `location` block that returns
-  `404 Cache-Control: no-store` for any path matching
-  `sw.js`, `service-worker.js` or `workbox-*.js`. This prevents the
-  browser from ever (re)fetching or updating a Service Worker, so the
-  addon stays SW-free even if n8n adds new registration sites upstream.
-
-## 2.17.3.2 — 2026-04-22
-
-- **Fix: workflow loads once then becomes an empty canvas on reload.**
-  n8n 2.17 registers a Service Worker that intercepts `/rest/*` and
-  `/types/*` requests. Under HA Ingress, the SW scope is pinned to
-  `/api/hassio_ingress/<token>/`, but the `<token>` is regenerated
-  on every addon restart. Service workers registered by a previous
-  addon version then serve stale responses for requests under the new
-  token — the first `GET /rest/workflows/:id` returned the real JSON
-  (200), every subsequent one returned a stub `400 Bad Request` with
-  body `"1"` and `Content-Type: application/octet-stream` (flagged
-  `(from service worker)` in DevTools). The Pinia workflow store
-  cleared, the Vue `inject()` chain cascaded to `undefined`
-  (`Could not resolve undefined` in `useInjectWorkflowId.ts:5`), and
-  the editor fell back to the "Add first step…" blank template.
-- Extend `base-path-fix.html` to replace
-  `navigator.serviceWorker.register` with a no-op **before any n8n
-  script runs**, unregister every existing SW on page boot, and purge
-  CacheStorage entries the SW may have populated. Offline caching is
-  pointless behind HA Ingress anyway.
+- **Fix: workflow loads once then becomes an empty canvas on reload
+  (under n8n 2.17).** n8n 2.17 added a frontend backend-health poll in
+  `useBackendStatus.ts` that calls `{BASE_PATH}healthz` continuously.
+  n8n itself only serves `/healthz` at the server *root*, not under
+  `N8N_PATH`, so under HA Ingress the poll lands on
+  `/api/hassio_ingress/<token>/healthz` — a prefixed URL n8n does not
+  route — and is answered with `400 Bad Request`. The editor reads the
+  400 as "backend down", clears the Pinia workflow store, and falls
+  back to the empty-canvas template. This matches the observed
+  "workflow loads once, then blank on every reload" behaviour exactly.
+- **`nginx.conf` (port 5690)**: added a `location ~ /healthz$` block
+  that answers every healthz probe directly with
+  `200 {"status":"ok"}` and `Cache-Control: no-store`, without
+  proxying to n8n. The poll always succeeds and the frontend keeps
+  the workflow store intact.
+- Diagnostics note: earlier investigation mis-attributed the bug to a
+  Service Worker scope/cache corruption (because the initial DevTools
+  screenshots showed `/rest/*` responses tagged `(from service
+  worker)` with a stub `400 "1"` body). Follow-up diagnostics on a SW-
+  free browser confirmed the SW was innocent and the 400 comes from
+  n8n itself on the prefixed `healthz` path. No SW workarounds are
+  shipped.
 
 ## 2.17.3.1 — 2026-04-22
 

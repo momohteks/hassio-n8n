@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.17.3.1 — 2026-04-22
+
+- Nouvelle version n8n : 2.16.2 → 2.17.3
+
+
 ## 2.16.2.6 — 2026-04-22
 
 - **Production cleanup of the HA mobile app `BASE_PATH` fix.** The

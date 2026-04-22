@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.17.3.2 — 2026-04-22
+
+- **Fix: workflow loads once then becomes an empty canvas on reload.**
+  n8n 2.17 registers a Service Worker that intercepts `/rest/*` and
+  `/types/*` requests. Under HA Ingress, the SW scope is pinned to
+  `/api/hassio_ingress/<token>/`, but the `<token>` is regenerated
+  on every addon restart. Service workers registered by a previous
+  addon version then serve stale responses for requests under the new
+  token — the first `GET /rest/workflows/:id` returned the real JSON
+  (200), every subsequent one returned a stub `400 Bad Request` with
+  body `"1"` and `Content-Type: application/octet-stream` (flagged
+  `(from service worker)` in DevTools). The Pinia workflow store
+  cleared, the Vue `inject()` chain cascaded to `undefined`
+  (`Could not resolve undefined` in `useInjectWorkflowId.ts:5`), and
+  the editor fell back to the "Add first step…" blank template.
+- Extend `base-path-fix.html` to replace
+  `navigator.serviceWorker.register` with a no-op **before any n8n
+  script runs**, unregister every existing SW on page boot, and purge
+  CacheStorage entries the SW may have populated. Offline caching is
+  pointless behind HA Ingress anyway.
+
 ## 2.17.3.1 — 2026-04-22
 
 - Nouvelle version n8n : 2.16.2 → 2.17.3

@@ -1,7 +1,7 @@
 <script>
-/* hassio-n8n — window.BASE_PATH shim for the HA mobile companion app.
+/* hassio-n8n — client-side shims injected into <head> by run.sh.
  *
- * Why this exists:
+ * (1) window.BASE_PATH shim (HA mobile companion app)
  * In the Home Assistant Android companion WebView, n8n's own
  * /static/base-path.js sets window.BASE_PATH = "/" at DOMContentLoaded,
  * instead of the real HA ingress prefix (/api/hassio_ingress/<token>/).
@@ -13,26 +13,72 @@
  * Fix: parse the ingress prefix from location.pathname and install a
  * getter/setter on window.BASE_PATH BEFORE any other script runs,
  * rejecting any later attempt to overwrite it with "/" or an empty
- * value. Injected into <head> by run.sh at addon startup.
+ * value.
+ *
+ * (2) Service Worker disable (n8n 2.17+ caching breakage)
+ * n8n 2.17 registers a Service Worker that intercepts /rest/* and
+ * /types/* requests. Under HA Ingress, the SW scope is pinned to the
+ * ingress path /api/hassio_ingress/<token>/, but the <token> is
+ * regenerated on every addon restart. Old SWs then serve stale cache
+ * entries for requests under the new token — observed symptom: the
+ * first GET /rest/workflows/:id returns the real JSON (200), but every
+ * subsequent one returns a stub "400 Bad Request" with body "1" and
+ * Content-Type application/octet-stream ("(from service worker)" in
+ * DevTools). The workflow store then clears, the Vue inject chain
+ * cascades to undefined, and the editor shows an empty canvas.
+ *
+ * Fix: block navigator.serviceWorker.register() entirely and unregister
+ * any SW that was installed by a previous addon version. Offline
+ * caching is irrelevant behind HA Ingress anyway.
  *
  * This file is loaded only inside the HA Ingress iframe, never on the
  * public webhooks/API port, so it cannot affect non-ingress traffic.
  */
 (function () {
+  /* --- (1) BASE_PATH pin ---------------------------------------------- */
   var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
-  if (!m) return;
-  var _bp = m[1];
-  try {
-    Object.defineProperty(window, 'BASE_PATH', {
-      configurable: true,
-      enumerable: true,
-      get: function () { return _bp; },
-      set: function (v) {
-        if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
-          _bp = v;
+  if (m) {
+    var _bp = m[1];
+    try {
+      Object.defineProperty(window, 'BASE_PATH', {
+        configurable: true,
+        enumerable: true,
+        get: function () { return _bp; },
+        set: function (v) {
+          if (v && typeof v === 'string' && v !== '/' && v !== _bp) {
+            _bp = v;
+          }
         }
+      });
+    } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
+  }
+
+  /* --- (2) Service Worker disable ------------------------------------- */
+  try {
+    if (navigator.serviceWorker) {
+      // Stop any future n8n script from registering a new SW. We return
+      // a promise that never resolves so callers don't crash on .then().
+      navigator.serviceWorker.register = function () {
+        return new Promise(function () { /* never resolves */ });
+      };
+      // Unregister any SW left over from a previous addon version
+      // (stale ingress-token scope → cached 400/"1" responses).
+      if (typeof navigator.serviceWorker.getRegistrations === 'function') {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          for (var i = 0; i < regs.length; i++) {
+            try { regs[i].unregister(); } catch (e) {}
+          }
+        }).catch(function () { /* swallow */ });
       }
-    });
-  } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
+      // Also purge any CacheStorage the SW might have populated.
+      if (window.caches && typeof caches.keys === 'function') {
+        caches.keys().then(function (names) {
+          for (var i = 0; i < names.length; i++) {
+            try { caches.delete(names[i]); } catch (e) {}
+          }
+        }).catch(function () { /* swallow */ });
+      }
+    }
+  } catch (e) { /* swallow */ }
 })();
 </script>

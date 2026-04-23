@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.17.5.1 — 2026-04-23
+
+- Nouvelle version n8n : 2.17.3 → 2.17.5
+
+
 ## 2.17.3.4 — 2026-04-23
 
 - **Fix: workflow loads once then becomes an empty canvas on reload

@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.17.7.2 — 2026-04-24
+
+- **Fix: blank workflow canvas on n8n 2.17.7 (`Error: Could not resolve
+  undefined` in `useInjectWorkflowId-*.js`).** n8n 2.17 no longer emits
+  a `<base>` tag in `index.html`, so `document.baseURI` follows the
+  current Vue Router URL. When the user opens a workflow, `baseURI`
+  points at `/api/hassio_ingress/<token>/workflow/<id>` and every
+  dynamic `import('./assets/X.js')` resolves to
+  `/api/hassio_ingress/<token>/workflow/assets/X.js` — a path n8n's
+  SPA catch-all answers with `index.html` (`text/html`, 30 kB). Vue
+  parses the HTML as an ES module, `inject()` receives an `undefined`
+  key, the NodeView component throws during setup, and the canvas
+  stays blank. Diagnosed live via DevTools: the same asset URL fetched
+  with an absolute prefix returned `817 B text/javascript`, confirming
+  the server was fine and only URL resolution was broken.
+- **`base-path-fix.html`**: extended the injected shim to also install
+  a `<base href="/api/hassio_ingress/<token>/">` as the very first
+  child of `<head>`. This pins `document.baseURI` to the ingress
+  prefix root regardless of subsequent Vue Router navigations, so
+  relative imports, modulepreload, and CSS `url()` all resolve to the
+  real `/assets/*` files. The existing `window.BASE_PATH` getter/
+  setter pin (Android WebView fix) is unchanged.
+- No other tweaks were removed: the healthz short-circuit (2.17.3.4),
+  `.mjs` patching, Supervisor-API-driven `N8N_PATH`, SSE push backend
+  and `N8N_SECURE_COOKIE=false` are all still required.
+
+
 ## 2.17.7.1 — 2026-04-24
 
 - Nouvelle version n8n : 2.17.5 → 2.17.7

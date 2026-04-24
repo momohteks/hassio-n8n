@@ -1,26 +1,55 @@
 <script>
-/* hassio-n8n — window.BASE_PATH shim (HA Android companion app fix).
+/* hassio-n8n — HA Ingress compatibility shim.
  *
- * In the Home Assistant Android companion WebView, n8n's own
- * /static/base-path.js sets window.BASE_PATH = "/" at DOMContentLoaded,
- * instead of the real HA ingress prefix (/api/hassio_ingress/<token>/).
- * Every subsequent /rest/* XHR then resolves against the page origin
- * (Home Assistant itself) instead of the addon, yielding 404 and the
- * "Error connecting to n8n" splash screen. Regular mobile/desktop
- * browsers do not exhibit this.
+ * Two fixes, both required, must run BEFORE any other script in the
+ * page. This snippet is injected at the very top of <head> by run.sh.
  *
- * Fix: parse the ingress prefix from location.pathname and install a
- * getter/setter on window.BASE_PATH BEFORE any other script runs,
- * rejecting any later attempt to overwrite it with "/" or an empty
+ * ---------------------------------------------------------------------
+ * Fix 1 — <base href> for relative URL resolution (since n8n 2.17.5+).
+ *
+ * n8n 2.17 no longer emits a <base> tag in index.html. When the user
+ * opens a workflow, Vue Router pushes the URL to
+ *   /api/hassio_ingress/<token>/workflow/<id>
+ * so document.baseURI points at /workflow/<id>. Any relative specifier
+ * inside a dynamic import (`./assets/X.js`) then resolves to
+ *   /api/hassio_ingress/<token>/workflow/assets/X.js
+ * which n8n's SPA catch-all answers with index.html (text/html). Vue
+ * parses that HTML as JS, inject() receives an undefined key, and the
+ * canvas renders blank. Injecting <base href> pins baseURI to the
+ * ingress prefix root so every relative URL — dynamic imports, CSS
+ * url(), modulepreload — resolves to the correct /assets/* files.
+ *
+ * ---------------------------------------------------------------------
+ * Fix 2 — window.BASE_PATH pin (HA Android companion app).
+ *
+ * n8n's own /static/base-path.js sets window.BASE_PATH = "/" at
+ * DOMContentLoaded inside the HA Android WebView (regular browsers are
+ * unaffected). Every subsequent /rest/* XHR then resolves against the
+ * page origin instead of the addon, yielding 404 and the "Error
+ * connecting to n8n" splash. A getter/setter on window.BASE_PATH
+ * rejects any later attempt to overwrite it with "/" or an empty
  * value.
  *
- * This file is loaded only inside the HA Ingress iframe, never on the
+ * ---------------------------------------------------------------------
+ * This file is served only inside the HA Ingress iframe, never on the
  * public webhooks/API port, so it cannot affect non-ingress traffic.
  */
 (function () {
   var m = location.pathname.match(/^(\/api\/hassio_ingress\/[^/]+\/)/);
   if (!m) return;
   var _bp = m[1];
+
+  // Fix 1: install <base href> as the very first child of <head>.
+  try {
+    var head = document.head || document.documentElement;
+    if (!document.querySelector('base')) {
+      var baseEl = document.createElement('base');
+      baseEl.href = _bp;
+      head.insertBefore(baseEl, head.firstChild);
+    }
+  } catch (e) { /* swallow — leave <base> absent */ }
+
+  // Fix 2: pin window.BASE_PATH against n8n's own override.
   try {
     Object.defineProperty(window, 'BASE_PATH', {
       configurable: true,

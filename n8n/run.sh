@@ -111,6 +111,49 @@ else
     echo "[hassio-n8n] WARNING: index.html or base-path-fix.html missing — shim NOT injected"
 fi
 
+# --- 3c. Neutralize n8n's browser-id auth check ----------------------------
+# Symptom: after opening a workflow, closing it, and reopening the same (or
+# another) workflow from the list, the editor shows a blank "My workflow"
+# canvas instead of the requested workflow's content. Root cause confirmed
+# live from the addon nginx access log:
+#   browserId check failed on /rest/workflows/:workflowId
+#   "GET /rest/workflows/<id> HTTP/1.1" 400 5
+# In `packages/cli/src/auth/auth.service.ts`, validateBrowserId compares the
+# JWT's hashed browserId against the one sent in the X-Browser-Id header.
+# Under HA Ingress (iframe, sometimes re-creating execution contexts on
+# router re-entry), the header occasionally arrives missing or stale; n8n
+# throws AuthError('Unauthorized'), the frontend reads the 400 as "workflow
+# not found", and redirects to /workflow/<newId>?new=true — the blank
+# canvas the user sees.
+# Fix: turn validateBrowserId into a no-op. Safe in the single-user HA
+# addon context — the JWT itself still authenticates; we only skip the
+# secondary per-browser binding. Idempotent via the .hassio_orig backup.
+AUTH_SERVICE_JS="$(node -e "try{process.stdout.write(require.resolve('n8n/dist/auth/auth.service.js'))}catch(e){}" 2>/dev/null)"
+if [ -z "${AUTH_SERVICE_JS}" ]; then
+    AUTH_SERVICE_JS="$(npm root -g 2>/dev/null)/n8n/dist/auth/auth.service.js"
+fi
+if [ -f "${AUTH_SERVICE_JS}" ]; then
+    if [ ! -f "${AUTH_SERVICE_JS}.hassio_orig" ]; then
+        cp -p "${AUTH_SERVICE_JS}" "${AUTH_SERVICE_JS}.hassio_orig"
+    fi
+    cp -p "${AUTH_SERVICE_JS}.hassio_orig" "${AUTH_SERVICE_JS}"
+    node -e "
+      const fs = require('fs');
+      const p = process.argv[1];
+      let s = fs.readFileSync(p, 'utf8');
+      const re = /validateBrowserId\s*\([^)]*\)\s*\{/;
+      if (re.test(s)) {
+        s = s.replace(re, m => m + ' return; /* hassio-n8n: browser-id check disabled */');
+        fs.writeFileSync(p, s);
+        console.log('[hassio-n8n] Patched validateBrowserId in ' + p);
+      } else {
+        console.log('[hassio-n8n] WARNING: validateBrowserId signature not found in ' + p);
+      }
+    " "${AUTH_SERVICE_JS}"
+else
+    echo "[hassio-n8n] WARNING: auth.service.js not found — browser-id patch skipped"
+fi
+
 # --- 4. Prepare /data and hand off to supervisord -------------------------
 # HA mounts /data as root:root at runtime (overriding the Dockerfile chown)
 chown -R node:node /data

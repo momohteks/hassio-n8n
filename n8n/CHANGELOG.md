@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.17.7.3 — 2026-04-24
+
+- **Fix: reopening a workflow shows a blank "My workflow" canvas.**
+  Reproduction: open a workflow → return to the workflows list → reopen
+  the same (or another) workflow — the editor lands on an empty new
+  canvas instead of the requested workflow. Root cause confirmed from
+  the addon's nginx access log:
+    `browserId check failed on /rest/workflows/:workflowId`
+    `"GET /rest/workflows/<id> HTTP/1.1" 400 5`
+  n8n's `validateBrowserId` middleware (in
+  `packages/cli/src/auth/auth.service.ts`) compares the JWT's hashed
+  `browserId` against the `browser-id` header on every non-skip
+  endpoint. Under HA Ingress (iframe, router re-entry on the same
+  route), the header occasionally arrives missing or stale; n8n throws
+  `AuthError('Unauthorized')`, the frontend reads the 400 as "workflow
+  not found" and redirects to `/workflow/<newAutoId>?new=true` — the
+  blank canvas the user sees. The 2.17.7.2 `<base href>` shim fixed a
+  different first-open symptom but did not address this re-open bug.
+- **`run.sh`**: adds a new startup step that neutralizes
+  `validateBrowserId` in the compiled `auth.service.js` by prepending
+  `return;` as the first statement of the method (idempotent via the
+  `.hassio_orig` backup pattern). Safe in the single-user HA addon
+  context — the JWT itself still authenticates each request; we only
+  skip the secondary per-browser binding that assumes a stable
+  non-iframed browser context.
+
+
 ## 2.17.7.2 — 2026-04-24
 
 - **Fix: blank workflow canvas on n8n 2.17.7 (`Error: Could not resolve

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.17.7.1 — 2026-04-24
+
+- Nouvelle version n8n : 2.17.5 → 2.17.7
+
+
 ## 2.17.5.1 — 2026-04-23
 
 - Nouvelle version n8n : 2.17.3 → 2.17.5

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.17.8.1 — 2026-04-28
+
+- Nouvelle version n8n : 2.17.7 → 2.17.8
+
+
 ## 2.17.7.3 — 2026-04-24
 
 - **Fix: reopening a workflow shows a blank "My workflow" canvas.**

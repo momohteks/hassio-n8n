@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.17.7.4 — 2026-04-28
+
+- **Definitive fix for the "reopen workflow shows blank canvas" bug.**
+  The 2.17.7.3 browser-id bypass was correct but insufficient — the bug
+  reproduces even with `validateBrowserId` neutralized. Captured live in
+  DevTools: the second axios GET on `/rest/workflows/<id>` (same tab,
+  same cookies, same headers as the working first GET) returns
+    `HTTP/1.1 400 / content-type: application/octet-stream / 5-byte body`
+  while a manual `fetch()` to the same URL from the same tab returns
+  `200 + JSON`. The frontend reads the 400 as "workflow not found" and
+  redirects to `/workflow/<newAutoId>?new=true`.
+- Root cause is a conditional-GET race: the browser caches the first
+  response (with ETag), sends `If-None-Match` on the second axios call,
+  and one of n8n's response middlewares emits a corrupted 400
+  octet-stream during revalidation. HA's PWA service worker scope on
+  the parent domain makes the failure mode more frequent.
+- **`nginx.conf`**: a new `location ~ ^/rest/` block on the Ingress
+  listener (port 5690) short-circuits conditional-GET entirely:
+  `If-None-Match` / `If-Modified-Since` are stripped before proxying,
+  `ETag` and `Last-Modified` are hidden on the response, and
+  `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`
+  is forced on every `/rest/*` reply. n8n therefore always returns
+  full responses, the browser never revalidates, and the SW cannot
+  intercept. WebSocket upgrade for `/rest/push` is preserved.
+- The 2.17.7.3 `validateBrowserId` no-op patch in `run.sh` is kept —
+  it's correct (verified: `/rest/active-workflows` no longer 400s on
+  browser-id mismatch) and complements the nginx fix.
+
+
 ## 2.17.7.3 — 2026-04-24
 
 - **Fix: reopening a workflow shows a blank "My workflow" canvas.**

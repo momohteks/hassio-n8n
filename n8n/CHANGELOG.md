@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.17.8.4 — 2026-04-28
+
+- **Fix 3 reworked**: replace `XMLHttpRequest` constructor with a
+  wrapper that, for `/rest/workflows/<id>` and `/rest/active-workflows`
+  GETs, emulates the XHR API on top of `fetch()` (verified to always
+  return 200 in the same tab/session) and delegates to the native XHR
+  for every other request. The 2.17.8.3 cache-buster approach failed
+  in production: the bug reproduces even with `?_hsb=<rand>` appended.
+  Routing the affected calls through `fetch()` sidesteps whatever
+  inside n8n's XHR pipeline produces the spurious 400 octet-stream
+  response. axios sees a normal 200 + JSON, the workflow loads.
+
+
 ## 2.17.8.3 — 2026-04-28
 
 - **Frontend cache-buster — final fix for the "reopen workflow shows

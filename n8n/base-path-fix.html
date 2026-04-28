@@ -102,25 +102,206 @@
     });
   } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
 
-  // Fix 3: append a cache-buster to GETs that suffer the second-visit
-  // 400 octet-stream bug. Match /rest/workflows/<id>(?...) and
-  // /rest/active-workflows(?...). Anything else is left untouched.
+  // Fix 3: route /rest/workflows/<id> & /rest/active-workflows GETs
+  // through fetch() instead of XMLHttpRequest, transparently. Verified
+  // experimentally: a manual fetch() to the exact same URL with the
+  // same headers and cookies in the same tab always returns 200 + JSON,
+  // while axios's XHR returns 400 + 5-byte octet-stream + content-type
+  // application/octet-stream. The triggering condition inside n8n's
+  // middleware stack is unknown (not headers, not concurrency, not
+  // conditional GET, not auth, not service worker — all ruled out via
+  // DevTools), so we sidestep XHR entirely on the affected endpoints
+  // by replacing the XMLHttpRequest constructor with a wrapper that
+  // emulates the XHR API on top of fetch() for matched URLs and
+  // delegates to the real XHR for everything else.
   try {
-    var _open = XMLHttpRequest.prototype.open;
-    var BUST_RE = /\/rest\/(workflows\/[A-Za-z0-9_-]+|active-workflows)(\?|$)/;
-    XMLHttpRequest.prototype.open = function (method, url) {
-      try {
-        if (typeof url === 'string' &&
-            (method === 'GET' || method === 'get') &&
-            BUST_RE.test(url)) {
-          var sep = url.indexOf('?') >= 0 ? '&' : '?';
-          var cb = '_hsb=' + Date.now().toString(36) +
-                   Math.random().toString(36).slice(2, 8);
-          arguments[1] = url + sep + cb;
+    var FAIL_RE = /\/rest\/(workflows\/[A-Za-z0-9_-]+|active-workflows)(\?|$)/;
+    var Native = window.XMLHttpRequest;
+
+    function FakeXHR() {
+      var self = this;
+      self.readyState = 0;
+      self.status = 0;
+      self.statusText = '';
+      self.responseURL = '';
+      self.responseType = '';
+      self.timeout = 0;
+      self.withCredentials = false;
+      self.upload = { addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return true; } };
+
+      var _response = '';
+      var _responseText = '';
+      var _respHeaders = '';
+      var _respHeadersMap = new Map();
+      var _aborted = false;
+      var _method = 'GET';
+      var _url = '';
+      var _hdrs = {};
+
+      var listeners = { readystatechange: [], load: [], loadstart: [], progress: [], abort: [], error: [], timeout: [], loadend: [] };
+      self.onreadystatechange = null;
+      self.onload = null;
+      self.onloadend = null;
+      self.onerror = null;
+      self.ontimeout = null;
+      self.onabort = null;
+      self.onloadstart = null;
+      self.onprogress = null;
+
+      self.addEventListener = function (t, fn) { if (listeners[t]) listeners[t].push(fn); };
+      self.removeEventListener = function (t, fn) {
+        if (!listeners[t]) return;
+        var i = listeners[t].indexOf(fn);
+        if (i >= 0) listeners[t].splice(i, 1);
+      };
+      self.dispatchEvent = function () { return true; };
+
+      function fire(t) {
+        var ev = { type: t, target: self, currentTarget: self, bubbles: false, cancelable: false };
+        (listeners[t] || []).slice().forEach(function (fn) { try { fn.call(self, ev); } catch (e) {} });
+        var on = self['on' + t];
+        if (typeof on === 'function') { try { on.call(self, ev); } catch (e) {} }
+      }
+
+      Object.defineProperty(self, 'response', { configurable: true, get: function () { return _response; } });
+      Object.defineProperty(self, 'responseText', { configurable: true, get: function () { return _responseText; } });
+
+      self.open = function (method, url) {
+        _method = method;
+        _url = url;
+        _hdrs = {};
+        self.readyState = 1;
+        fire('readystatechange');
+      };
+
+      self.setRequestHeader = function (k, v) { _hdrs[k] = String(v); };
+      self.overrideMimeType = function () {};
+      self.getAllResponseHeaders = function () { return _respHeaders; };
+      self.getResponseHeader = function (k) { return _respHeadersMap.get(String(k).toLowerCase()) || null; };
+      self.abort = function () {
+        _aborted = true;
+        self.readyState = 4;
+        fire('abort');
+        fire('loadend');
+      };
+
+      self.send = function (body) {
+        try {
+          fetch(_url, {
+            method: _method,
+            credentials: 'include',
+            headers: _hdrs,
+            cache: 'no-store',
+            body: body || undefined,
+          }).then(function (r) {
+            if (_aborted) return null;
+            return r.text().then(function (txt) { return { r: r, txt: txt }; });
+          }).then(function (out) {
+            if (!out || _aborted) return;
+            var r = out.r, txt = out.txt;
+            self.status = r.status;
+            self.statusText = r.statusText || (r.status === 200 ? 'OK' : '');
+            self.responseURL = r.url;
+            var hl = [];
+            r.headers.forEach(function (v, k) {
+              hl.push(k + ': ' + v);
+              _respHeadersMap.set(k.toLowerCase(), v);
+            });
+            _respHeaders = hl.join('\r\n') + '\r\n';
+            if (self.responseType === 'json') {
+              try { _response = JSON.parse(txt); } catch (e) { _response = null; }
+              _responseText = '';
+            } else if (self.responseType === 'arraybuffer') {
+              _response = new TextEncoder().encode(txt).buffer;
+              _responseText = '';
+            } else if (self.responseType === 'blob') {
+              _response = new Blob([txt], { type: r.headers.get('content-type') || 'application/octet-stream' });
+              _responseText = '';
+            } else {
+              _response = txt;
+              _responseText = txt;
+            }
+            self.readyState = 2; fire('readystatechange');
+            self.readyState = 3; fire('readystatechange');
+            fire('progress');
+            self.readyState = 4; fire('readystatechange');
+            fire('load');
+            fire('loadend');
+          }).catch(function () {
+            if (_aborted) return;
+            self.status = 0;
+            self.readyState = 4;
+            fire('readystatechange');
+            fire('error');
+            fire('loadend');
+          });
+        } catch (e) {
+          self.status = 0;
+          self.readyState = 4;
+          fire('error');
+          fire('loadend');
         }
-      } catch (e) { /* swallow — fall through to original open */ }
-      return _open.apply(this, arguments);
-    };
+      };
+    }
+
+    function ProxyXHR() {
+      var self = this;
+      var real = new Native();
+      var fake = null;
+      var mode = null;
+      var pending = {};
+
+      function active() { return mode === 'fake' ? fake : real; }
+
+      function defineProxy(prop) {
+        Object.defineProperty(self, prop, {
+          configurable: true,
+          enumerable: true,
+          get: function () { return mode === 'fake' ? fake[prop] : real[prop]; },
+          set: function (v) {
+            if (mode === 'fake') { fake[prop] = v; }
+            else if (mode === 'real') { try { real[prop] = v; } catch (e) {} }
+            else { pending[prop] = v; try { real[prop] = v; } catch (e) {} }
+          }
+        });
+      }
+
+      ['readyState','status','statusText','response','responseText','responseURL','responseType','responseXML','timeout','withCredentials','upload']
+        .forEach(defineProxy);
+      ['onreadystatechange','onload','onloadend','onerror','ontimeout','onabort','onloadstart','onprogress']
+        .forEach(defineProxy);
+
+      self.open = function (method, url) {
+        if (typeof url === 'string' && (method === 'GET' || method === 'get') && FAIL_RE.test(url)) {
+          mode = 'fake';
+          fake = new FakeXHR();
+          // Forward properties set before open()
+          Object.keys(pending).forEach(function (p) { try { fake[p] = pending[p]; } catch (e) {} });
+          return fake.open(method, url);
+        }
+        mode = 'real';
+        return real.open.apply(real, arguments);
+      };
+
+      self.setRequestHeader = function (k, v) { return active().setRequestHeader(k, v); };
+      self.send = function (b) { return mode === 'fake' ? fake.send(b) : real.send.apply(real, arguments); };
+      self.abort = function () { return active().abort(); };
+      self.getAllResponseHeaders = function () { return active().getAllResponseHeaders(); };
+      self.getResponseHeader = function (k) { return active().getResponseHeader(k); };
+      self.overrideMimeType = function (m) { return active().overrideMimeType(m); };
+      self.addEventListener = function (t, fn, o) { return active().addEventListener(t, fn, o); };
+      self.removeEventListener = function (t, fn, o) { return active().removeEventListener(t, fn, o); };
+      self.dispatchEvent = function (e) { return active().dispatchEvent(e); };
+    }
+
+    ProxyXHR.UNSENT = 0;
+    ProxyXHR.OPENED = 1;
+    ProxyXHR.HEADERS_RECEIVED = 2;
+    ProxyXHR.LOADING = 3;
+    ProxyXHR.DONE = 4;
+    ProxyXHR.prototype = Native.prototype;
+
+    window.XMLHttpRequest = ProxyXHR;
   } catch (e) { /* swallow — leave XHR alone */ }
 })();
 </script>

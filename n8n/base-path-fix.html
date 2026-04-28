@@ -31,6 +31,45 @@
  * value.
  *
  * ---------------------------------------------------------------------
+ * Fix 3 — cache-buster on /rest/workflows/<id> & /rest/active-workflows
+ *          (HA Ingress "blank canvas on reopen workflow" bug).
+ *
+ * Symptom: open a workflow → return to the workflows list → reopen the
+ * same (or another) workflow — the editor lands on a blank
+ * "My workflow" canvas (URL becomes /workflow/<newAutoId>?new=true)
+ * instead of loading the requested workflow.
+ *
+ * Captured live in DevTools (n8n 2.17.7+ behind HA Ingress):
+ *   - 1st GET /rest/workflows/<id>  → 200, JSON workflow data
+ *   - 2nd GET /rest/workflows/<id>  → 400, content-type
+ *                                    application/octet-stream, 5-byte
+ *                                    body, x-served-by header MISSING
+ *
+ * The frontend reads the 400 as "workflow not found" and redirects to
+ * a brand-new empty workflow. Reproducible only via axios's XHR through
+ * n8n's interceptor chain — never through plain fetch() in the same
+ * tab with the same headers — and only on the SECOND visit, never the
+ * first. We confirmed:
+ *   - it's NOT a conditional-GET race (still happens with ETag stripped
+ *     and Cache-Control: no-store forced from nginx);
+ *   - it's NOT the n8n auth middleware (validateBrowserId neutralized
+ *     since 2.17.7.3, /rest/active-workflows verified to no longer
+ *     400 on browser-id mismatch);
+ *   - it's NOT HA's PWA service worker (still happens after
+ *     unregister + cache clear);
+ *   - it's NOT a header difference (replicating the EXACT axios headers
+ *     from a manual XHR returns 200 with full data).
+ *
+ * The exact root cause inside n8n's middleware stack remains unclear,
+ * but a single distinguishing factor reliably masks it: appending any
+ * unique query parameter to the URL. The same XHR with `?_=<ts>` always
+ * returns 200. We therefore wrap XMLHttpRequest.open() to append a
+ * cache-buster on every GET to /rest/workflows/:id and
+ * /rest/active-workflows. n8n's express ignores unknown query params,
+ * so the workflow logic is unaffected. /rest/push (SSE), /rest/login,
+ * binary-data and other endpoints are untouched.
+ *
+ * ---------------------------------------------------------------------
  * This file is served only inside the HA Ingress iframe, never on the
  * public webhooks/API port, so it cannot affect non-ingress traffic.
  */
@@ -62,5 +101,26 @@
       }
     });
   } catch (e) { /* swallow — leave window.BASE_PATH untouched */ }
+
+  // Fix 3: append a cache-buster to GETs that suffer the second-visit
+  // 400 octet-stream bug. Match /rest/workflows/<id>(?...) and
+  // /rest/active-workflows(?...). Anything else is left untouched.
+  try {
+    var _open = XMLHttpRequest.prototype.open;
+    var BUST_RE = /\/rest\/(workflows\/[A-Za-z0-9_-]+|active-workflows)(\?|$)/;
+    XMLHttpRequest.prototype.open = function (method, url) {
+      try {
+        if (typeof url === 'string' &&
+            (method === 'GET' || method === 'get') &&
+            BUST_RE.test(url)) {
+          var sep = url.indexOf('?') >= 0 ? '&' : '?';
+          var cb = '_hsb=' + Date.now().toString(36) +
+                   Math.random().toString(36).slice(2, 8);
+          arguments[1] = url + sep + cb;
+        }
+      } catch (e) { /* swallow — fall through to original open */ }
+      return _open.apply(this, arguments);
+    };
+  } catch (e) { /* swallow — leave XHR alone */ }
 })();
 </script>

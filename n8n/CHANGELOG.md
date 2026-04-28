@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.17.8.3 — 2026-04-28
+
+- **Frontend cache-buster — final fix for the "reopen workflow shows
+  blank canvas" bug.** The 2.17.8.2 nginx hardening (no-store, ETag
+  hidden, `If-None-Match` stripped) was correct but insufficient: the
+  bug reproduces even with conditional-GET impossible. The exact root
+  cause inside n8n's middleware stack remains unidentified, but a
+  single distinguishing factor reliably masks it: any unique query
+  parameter on the URL. The same axios call with `?_=<ts>` returns
+  200 with full data; without it, a second visit returns 400 +
+  `application/octet-stream` + 5-byte body, and the frontend treats
+  the 400 as "workflow not found" → redirect to
+  `/workflow/<newAutoId>?new=true`.
+- **`base-path-fix.html` — Fix 3**: wrap `XMLHttpRequest.prototype.open`
+  to append `?_hsb=<base36-time><rand>` to every GET on
+  `/rest/workflows/<id>` and `/rest/active-workflows`. Each request is
+  unique → whatever cache/state corruption was producing the 400 can no
+  longer match. n8n's express ignores unknown query parameters, so
+  workflow semantics are unaffected. /rest/push (SSE), /rest/login,
+  binary-data and the rest of the API are untouched. Confirmed
+  experimentally: identical headers + same XHR but with cache-buster
+  always return 200 + the workflow JSON.
+- The 2.17.8.2 nginx `/rest/*` block is kept as defense-in-depth (any
+  future cache-related regression is still neutralized).
+
+
 ## 2.17.8.2 — 2026-04-28
 
 - **Definitive fix for the "reopen workflow shows blank canvas" bug.**

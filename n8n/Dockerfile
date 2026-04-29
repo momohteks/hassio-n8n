@@ -89,10 +89,9 @@ COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY n8n-exports.sh /n8n-exports.sh
 COPY run.sh /run.sh
-COPY base-path-fix.html /base-path-fix.html
 
 RUN chmod +x /n8n-exports.sh /run.sh
 
-EXPOSE 5690 8081
+EXPOSE 5678 8081
 
 CMD ["/run.sh"]

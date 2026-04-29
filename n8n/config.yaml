@@ -2,26 +2,26 @@ name: n8n
 # Format : {n8n_version}.{addon_build}
 # - 3 premiers chiffres = version n8n upstream
 # - 4ème chiffre = numéro de build addon (reset à 1 quand n8n est mis à jour)
-version: "2.17.8.4"
+version: "2.17.8.5"
 slug: n8n
-description: n8n — Workflow Automation Platform
+description: n8n — Workflow Automation Platform (direct, no HA Ingress)
 url: https://github.com/momohteks/hassio-n8n
 # aarch64 temporairement désactivé (voir CLAUDE.md / CHANGELOG)
 arch:
   - amd64
 startup: application
 boot: auto
-ingress: true
-ingress_port: 5690
-ingress_stream: true
-# Needed so the startup script can query /addons/self/info for the
-# real ingress_url — this replaces the old sub_filter-based prefix hack.
-hassio_api: true
-homeassistant_api: false
+# HA Ingress is intentionally disabled — n8n 2.x does not fully support
+# being served under a sub-path (see upstream issue n8n-io/n8n#19437,
+# maintainer statement: "N8N_PATH is not fully supported in the app").
+# Expose port 5678 via your own reverse proxy on a dedicated subdomain
+# (e.g. n8n.example.com) and point users there.
 ports:
+  5678/tcp: 5678
   8081/tcp: 8081
 ports_description:
-  8081/tcp: Webhooks n8n et API REST
+  5678/tcp: n8n UI + REST API + webhooks (use behind your reverse proxy)
+  8081/tcp: Public webhooks only (no UI), firewall-friendly
 map:
   - data:rw
 options:

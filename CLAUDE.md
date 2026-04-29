@@ -5,23 +5,27 @@
 Addon Home Assistant qui héberge une instance n8n via **nginx + supervisord**.
 Repo : https://github.com/momohteks/hassio-n8n
 
-## Architecture (depuis 2.16.1.16)
+## Architecture (depuis 2.17.8.5 — HA Ingress retiré)
 
 ```
-[HA Ingress] → nginx:5690  →  n8n:5680   (UI n8n, via ingress_stream + N8N_PATH)
-[Public]     → nginx:8081  →  n8n:5680   (webhooks & API)
-                              Task Broker (interne n8n 2.x) → 5679
+[Reverse proxy externe / sous-domaine]
+   → nginx:5678  →  n8n:5678   (UI + REST API + webhooks)
+   → nginx:8081  →  n8n:5678   (webhooks publics, sans UI, 403 sur /)
+                                Task Broker (interne n8n 2.x) → 5679
 ```
 
-- **nginx** = simple reverse proxy (5690 ingress + 8081 webhooks publics).
-  Aucun `sub_filter`, aucune réécriture d'URL, aucun shim JS.
-- **n8n** tourne en interne sur le port 5680 (5679 pris par le Task Broker).
-- **URL Ingress** : `run.sh` interroge au démarrage l'API Supervisor
-  `GET /addons/self/info` pour récupérer `ingress_url`, puis l'exporte comme
-  `N8N_PATH`. n8n remplace alors `/{{BASE_PATH}}/` par cette URL dans tous
-  ses fichiers `.css`/`.js`/`index.html`. `run.sh` fait le même remplacement
-  sur les fichiers `.mjs` (que le glob de n8n manque), avec une sauvegarde
-  `.hassio_orig` pour idempotence.
+- **HA Ingress désactivé** : n8n 2.x ne supporte pas correctement d'être
+  servi sous un sous-chemin (cf
+  [n8n-io/n8n#19437](https://github.com/n8n-io/n8n/issues/19437),
+  citation maintainer Tomi : *"N8N_PATH is not fully supported in the
+  app (...) we are possibly going to remove the path option from v2"*).
+  L'utilisateur configure son propre reverse proxy (Nginx Proxy
+  Manager, Traefik…) qui pointe un sous-domaine dédié vers
+  `http://<IP-HA>:5678`.
+- **nginx** = simple reverse proxy. Pas de `sub_filter`, pas de
+  réécriture, pas de shim JS, pas de short-circuit healthz, pas de
+  `<base href>` injection, pas de patching `.mjs` ou `auth.service.js`.
+- **n8n** tourne sur son port standard 5678 (Task Broker sur 5679).
 - **supervisord** gère les deux processus (nginx + n8n).
 - Les données persistent dans `/data` (volume HA).
 
@@ -33,7 +37,7 @@ Repo : https://github.com/momohteks/hassio-n8n
 | `n8n/Dockerfile` | Image multi-arch — `ARG N8N_VERSION` mis à jour automatiquement |
 | `n8n/build.yaml` | Images de base HA par architecture |
 | `n8n/n8n-exports.sh` | Toutes les variables d'environnement n8n |
-| `n8n/nginx.conf` | Proxy Ingress (5678) et webhooks (8081) vers n8n (5680) |
+| `n8n/nginx.conf` | Proxy UI (5678) et webhooks publics (8081) vers n8n (5678 interne) |
 | `n8n/supervisord.conf` | Gestion processus nginx + n8n |
 | `n8n/run.sh` | Entrypoint du container |
 | `.github/workflows/update-n8n.yml` | Détecte nouvelles versions n8n (cron quotidien) |
@@ -98,6 +102,10 @@ docker run -p 5678:5678 -p 8081:8081 -v $(pwd)/data:/data hassio-n8n-test
 
 1. HA → Paramètres → Modules complémentaires → Boutique → ⋮ → Dépôts
 2. Ajouter : `https://github.com/momohteks/hassio-n8n`
+3. Installer l'addon, puis configurer un reverse proxy externe (NPM,
+   Traefik, Caddy…) qui pointe un sous-domaine vers `http://<IP-HA>:5678`
+   pour accéder à l'UI. L'addon n'est plus accessible via le panneau
+   Ingress de HA depuis la 2.17.8.5.
 
 ## Architectures supportées
 

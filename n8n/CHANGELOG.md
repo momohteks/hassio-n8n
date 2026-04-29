@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.18.5.2 — 2026-04-29 — **Breaking: HA Ingress removed**
+
+n8n 2.x does not fully support being served behind a sub-path
+(`N8N_PATH`), per upstream maintainer Tomi in
+[n8n-io/n8n#19437](https://github.com/n8n-io/n8n/issues/19437):
+
+> *"the issue with `N8N_PATH`, like you have seen, is that it's not
+> fully supported in the app. (...) we are possibly going to remove the
+> path option from v2 so it may be easier to move to just a subdomain
+> to avoid a migration in the future."*
+
+After v2.17.x this manifested as a hard-to-pin 400 octet-stream
+response on `/rest/workflows/<id>` on the second navigation, redirecting
+the user to a blank "My workflow" canvas. Multiple workarounds at the
+nginx and frontend layers (browser-id bypass, conditional-GET strip,
+cache-buster, full XHR-to-fetch wrapper) failed to mask the bug
+reliably. Following the upstream recommendation, this addon now drops
+HA Ingress entirely.
+
+**What changed**:
+- `config.yaml`: `ingress: true` removed; `ports: 5678/tcp` added
+  (UI + REST API + webhooks). Port 8081 still exposed for webhook-only
+  public access.
+- `nginx.conf`: simple reverse proxy on 5678 (UI) and 8081 (webhooks).
+  No more `sub_filter`, no `/rest/*` cache hardening, no healthz
+  short-circuit, no `<base href>` injection, no `/{{BASE_PATH}}/`
+  rewriting.
+- `run.sh`: down to ~25 lines. Reads addon options, fixes /data
+  ownership, hands off to supervisord. No Supervisor API call,
+  no `.mjs` patching, no `auth.service.js` runtime patch, no
+  `base-path-fix.html` injection.
+- `n8n-exports.sh`: removed `N8N_PATH`, `N8N_SECURE_COOKIE=false`,
+  `N8N_PUSH_BACKEND=sse` (HA-Ingress-specific workarounds). n8n now
+  listens on its standard port 5678.
+- `base-path-fix.html` deleted (~190 lines of frontend shim no longer
+  needed).
+- `Dockerfile`: removes the COPY of `base-path-fix.html`; EXPOSE 5678
+  instead of 5690.
+
+**Action required**: configure your reverse proxy (Nginx Proxy
+Manager, Traefik, Caddy…) to point a dedicated subdomain
+(e.g. `n8n.example.com`) at `http://<HA-IP>:5678`. The HA sidebar
+panel will no longer load n8n directly — open it in a tab via your
+subdomain. Webhooks/API on port 8081 are unchanged.
+
+Also bumps n8n upstream from 2.17.8 to 2.18.5.
+
+
 ## 2.18.5.1 — 2026-04-29
 
 - Nouvelle version n8n : 2.17.8 → 2.18.5

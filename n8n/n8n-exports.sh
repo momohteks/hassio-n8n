@@ -2,19 +2,15 @@
 
 # ---------------------------------------------------------------------------
 # n8n-exports.sh — Environment variables for n8n
-# Sourced by supervisord just before starting n8n. Relies on run.sh having
-# already resolved the ingress URL and exported N8N_PATH.
+# Sourced by supervisord just before starting n8n.
 # ---------------------------------------------------------------------------
 
-# Internal port for n8n. nginx sits in front on 5690 (ingress) and 8081
-# (public webhooks/API). 5680 avoids the n8n 2.x Task Broker default (5679).
-export N8N_PORT=5680
+# n8n listens on its standard port. nginx in front proxies port 5678 (UI +
+# everything) and 8081 (public webhooks only). Internal port is the n8n
+# default. Task Broker uses 5679 internally; nothing else needs adjusting.
+export N8N_PORT=5678
 export N8N_PROTOCOL=http
 export N8N_HOST=0.0.0.0
-
-# N8N_PATH must already be exported by run.sh (resolved from the HA
-# Supervisor /addons/self/info endpoint). Fallback to '/' for safety.
-export N8N_PATH="${N8N_PATH:-/}"
 
 # Persistent data folder (HA /data volume)
 export N8N_USER_FOLDER=/data
@@ -23,7 +19,7 @@ export N8N_USER_FOLDER=/data
 export DB_TYPE=sqlite
 export DB_SQLITE_DATABASE=/data/database.sqlite
 
-# Timezone (injected by run.sh)
+# Timezone (injected by run.sh from addon options)
 export GENERIC_TIMEZONE="${TIMEZONE:-Europe/Paris}"
 export TZ="${TIMEZONE:-Europe/Paris}"
 
@@ -31,11 +27,6 @@ export TZ="${TIMEZONE:-Europe/Paris}"
 if [ -n "${WEBHOOK_URL}" ]; then
     export WEBHOOK_URL="${WEBHOOK_URL}"
 fi
-
-# HA Ingress serves the UI over HTTP (even if HA itself is HTTPS), and
-# cookies flagged Secure would be dropped by the browser. Disable the
-# Secure flag so the auth cookie is accepted inside the ingress iframe.
-export N8N_SECURE_COOKIE=false
 
 # UI and telemetry hygiene
 export N8N_HIRING_BANNER_ENABLED=false
@@ -49,17 +40,6 @@ export N8N_LOG_OUTPUT=console
 
 # Executions
 export EXECUTIONS_MODE=regular
-
-# ---------------------------------------------------------------------------
-# Push backend — SSE instead of WebSocket
-# ---------------------------------------------------------------------------
-# The HA mobile app's WebView breaks the WebSocket upgrade through the
-# Ingress proxy chain (works fine in a regular mobile browser, fails in the
-# app → "Error connecting to n8n / Could not connect to server"). SSE uses
-# plain HTTP long-polling, which survives the WebView proxy layer. SSE
-# also works fine in desktop browsers, so this is a universal downgrade
-# with no regression on other clients.
-export N8N_PUSH_BACKEND=sse
 
 # ---------------------------------------------------------------------------
 # Task Runners (n8n 2.x — mandatory)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.18.5.1 — 2026-04-29
+
+- Nouvelle version n8n : 2.17.8 → 2.18.5
+
+
 ## 2.17.8.4 — 2026-04-28
 
 - **Fix 3 reworked**: replace `XMLHttpRequest` constructor with a

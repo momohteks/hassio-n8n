@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.18.5.3 — 2026-04-30
+
+- **Fix port conflict between nginx and n8n.** 2.18.5.2 set
+  `N8N_PORT=5678`, the same port nginx listens on publicly, so n8n
+  failed to start with `n8n's port 5678 is already in use` and
+  supervisord retried until it gave up. n8n now listens on internal
+  port `5680` again (5679 is reserved by the n8n 2.x Task Broker),
+  and nginx forwards to it from public port 5678.
+- All repo content (Dockerfile, build.yaml, DOCS.md, CLAUDE.md,
+  GitHub Actions workflows, `.gitattributes`) translated to English.
+  No French strings remain anywhere in the repo, per the project
+  documentation policy.
+
+
 ## 2.18.5.2 — 2026-04-29 — **Breaking: HA Ingress removed**
 
 n8n 2.x does not fully support being served behind a sub-path

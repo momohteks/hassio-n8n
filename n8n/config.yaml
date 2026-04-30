@@ -1,12 +1,12 @@
 name: n8n
-# Format : {n8n_version}.{addon_build}
-# - 3 premiers chiffres = version n8n upstream
-# - 4ème chiffre = numéro de build addon (reset à 1 quand n8n est mis à jour)
-version: "2.18.5.2"
+# Version format: {n8n_version}.{addon_build}
+#   - first 3 digits track n8n upstream
+#   - 4th digit is the addon build number (reset to 1 when n8n is bumped)
+version: "2.18.5.3"
 slug: n8n
 description: n8n — Workflow Automation Platform (direct, no HA Ingress)
 url: https://github.com/momohteks/hassio-n8n
-# aarch64 temporairement désactivé (voir CLAUDE.md / CHANGELOG)
+# aarch64 temporarily disabled (see CLAUDE.md / CHANGELOG).
 arch:
   - amd64
 startup: application

@@ -1,23 +1,23 @@
-name: Mise à jour version addon
+name: Bump addon version
 
 on:
   schedule:
-    # Chaque jour à 6h UTC : vérifie si une nouvelle version n8n est dispo
+    # Daily at 06:00 UTC: check whether a new n8n version is available
     - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Mode de mise à jour"
+        description: "Update mode"
         type: choice
         required: true
         default: "auto"
         options:
-          - auto           # check upstream n8n, maj si nouvelle version
-          - rebuild_only   # bump uniquement le 4ème digit (pas de maj n8n)
+          - auto           # check upstream npm, bump if new n8n version
+          - rebuild_only   # bump only the 4th digit (no n8n change)
 
 jobs:
   update:
-    name: Calcul et application de la nouvelle version
+    name: Compute and apply the next version
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,7 +32,7 @@ jobs:
           token: ${{ secrets.RELEASE_PAT }}
           fetch-depth: 0
 
-      - name: Lire la version actuelle
+      - name: Read current version
         id: current
         run: |
           CURRENT=$(grep '^version:' n8n/config.yaml | sed 's/version: *"//; s/"//')
@@ -42,9 +42,9 @@ jobs:
           echo "full=$CURRENT"         >> $GITHUB_OUTPUT
           echo "n8n=$CURRENT_N8N"      >> $GITHUB_OUTPUT
           echo "build=$CURRENT_BUILD"  >> $GITHUB_OUTPUT
-          echo "Version actuelle : $CURRENT (n8n=$CURRENT_N8N, build=$CURRENT_BUILD)"
+          echo "Current version: $CURRENT (n8n=$CURRENT_N8N, build=$CURRENT_BUILD)"
 
-      - name: Calculer la nouvelle version
+      - name: Compute next version
         id: next
         run: |
           MODE="${{ github.event.inputs.mode || 'auto' }}"
@@ -52,23 +52,23 @@ jobs:
           CURRENT_BUILD="${{ steps.current.outputs.build }}"
 
           if [ "$MODE" = "rebuild_only" ]; then
-            # Rebuild manuel : bump 4ème digit uniquement
+            # Manual rebuild: bump 4th digit only
             NEW_N8N="$CURRENT_N8N"
             NEW_BUILD=$((CURRENT_BUILD + 1))
-            REASON="Rebuild manuel (sans changement n8n)"
+            REASON="Manual rebuild (no n8n change)"
             UPDATE=true
           else
-            # Mode auto : vérifier npm pour nouvelle version n8n
+            # Auto mode: check npm for a newer n8n version
             LATEST_N8N=$(npm view n8n version)
-            echo "Dernière version n8n sur npm : $LATEST_N8N"
+            echo "Latest n8n on npm: $LATEST_N8N"
             if [ "$LATEST_N8N" = "$CURRENT_N8N" ]; then
-              echo "Pas de nouvelle version n8n ($CURRENT_N8N). Rien à faire."
+              echo "No new n8n version ($CURRENT_N8N). Nothing to do."
               UPDATE=false
             else
-              # Nouvelle version n8n → reset build à 1
+              # New n8n version → reset build to 1
               NEW_N8N="$LATEST_N8N"
               NEW_BUILD=1
-              REASON="Nouvelle version n8n : $CURRENT_N8N → $NEW_N8N"
+              REASON="New n8n version: $CURRENT_N8N → $NEW_N8N"
               UPDATE=true
             fi
           fi
@@ -80,20 +80,20 @@ jobs:
             echo "n8n=$NEW_N8N"          >> $GITHUB_OUTPUT
             echo "build=$NEW_BUILD"      >> $GITHUB_OUTPUT
             echo "reason=$REASON"        >> $GITHUB_OUTPUT
-            echo "Nouvelle version : $NEW_VERSION — $REASON"
+            echo "Next version: $NEW_VERSION — $REASON"
           fi
 
-      - name: Mettre à jour config.yaml
+      - name: Update config.yaml
         if: steps.next.outputs.update == 'true'
         run: |
           sed -i "s/^version: \".*\"/version: \"${{ steps.next.outputs.version }}\"/" n8n/config.yaml
 
-      - name: Mettre à jour Dockerfile
+      - name: Update Dockerfile
         if: steps.next.outputs.update == 'true'
         run: |
           sed -i "s/^ARG N8N_VERSION=.*/ARG N8N_VERSION=${{ steps.next.outputs.n8n }}/" n8n/Dockerfile
 
-      - name: Mettre à jour CHANGELOG
+      - name: Update CHANGELOG
         if: steps.next.outputs.update == 'true'
         run: |
           DATE=$(date +%Y-%m-%d)
@@ -102,15 +102,15 @@ jobs:
           ENTRY="## ${VERSION} — ${DATE}\n\n- ${REASON}\n"
           sed -i "1a\\\\n${ENTRY}" n8n/CHANGELOG.md
 
-      - name: Commit et tag
+      - name: Commit and tag
         if: steps.next.outputs.update == 'true'
         run: |
           VERSION="${{ steps.next.outputs.version }}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add n8n/config.yaml n8n/Dockerfile n8n/CHANGELOG.md
-          git commit -m "chore: bump version vers ${VERSION} — ${{ steps.next.outputs.reason }}"
+          git commit -m "chore: bump version to ${VERSION} — ${{ steps.next.outputs.reason }}"
           git push origin main
           git tag "v${VERSION}"
           git push origin "v${VERSION}"
-          echo "Tag v${VERSION} créé et poussé → déclenche le build Docker"
+          echo "Tag v${VERSION} created and pushed — triggers Docker build"

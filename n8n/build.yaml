@@ -1,5 +1,5 @@
 build_from:
-  # aarch64 temporairement désactivé — voir config.yaml et CLAUDE.md
+  # aarch64 temporarily disabled — see config.yaml and CLAUDE.md
   amd64: python:3.13-slim
 labels:
   org.opencontainers.image.title: "n8n Home Assistant Addon"

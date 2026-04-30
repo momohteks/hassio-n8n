@@ -5,10 +5,10 @@
 # Sourced by supervisord just before starting n8n.
 # ---------------------------------------------------------------------------
 
-# n8n listens on its standard port. nginx in front proxies port 5678 (UI +
-# everything) and 8081 (public webhooks only). Internal port is the n8n
-# default. Task Broker uses 5679 internally; nothing else needs adjusting.
-export N8N_PORT=5678
+# nginx listens publicly on 5678 (UI + everything) and 8081 (webhooks
+# only), so n8n must NOT share port 5678 with nginx. Internal n8n port
+# is 5680 (5679 is taken by the n8n 2.x Task Broker).
+export N8N_PORT=5680
 export N8N_PROTOCOL=http
 export N8N_HOST=0.0.0.0
 

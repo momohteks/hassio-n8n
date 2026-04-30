@@ -1,14 +1,14 @@
-name: Build et publication des images Docker
+name: Build and publish Docker images
 
 on:
   push:
     tags:
-      # Format 4-digits : v{n8n_major}.{n8n_minor}.{n8n_patch}.{addon_build}
+      # 4-digit format: v{n8n_major}.{n8n_minor}.{n8n_patch}.{addon_build}
       - "v*.*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version complète à builder (ex: 2.16.1.4)"
+        description: "Full version to build (e.g. 2.16.1.4)"
         required: true
 
 jobs:
@@ -24,13 +24,13 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
-          # aarch64 temporairement désactivé — voir n8n/config.yaml et CLAUDE.md
+          # aarch64 temporarily disabled — see n8n/config.yaml and CLAUDE.md
 
     steps:
-      - name: Checkout du repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Extraire les versions
+      - name: Extract versions
         id: version
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -38,14 +38,14 @@ jobs:
           else
             FULL="${{ github.event.inputs.version }}"
           fi
-          # N8N_VERSION = 3 premiers digits (ex : 2.16.1.4 → 2.16.1)
+          # N8N_VERSION = first 3 digits (e.g. 2.16.1.4 → 2.16.1)
           N8N=$(echo "$FULL" | cut -d. -f1-3)
           echo "full=$FULL" >> $GITHUB_OUTPUT
           echo "n8n=$N8N"   >> $GITHUB_OUTPUT
-          echo "Version addon complète : $FULL"
-          echo "Version n8n à installer : $N8N"
+          echo "Full addon version: $FULL"
+          echo "n8n version to install: $N8N"
 
-      - name: Login sur ghcr.io
+      - name: Login to ghcr.io
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -55,7 +55,7 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build et push image ${{ matrix.arch }}
+      - name: Build and push ${{ matrix.arch }} image
         uses: docker/build-push-action@v5
         with:
           context: ./n8n
@@ -72,17 +72,17 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
   create-release:
-    name: Créer la GitHub Release
+    name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: build-and-push
     permissions:
       contents: write
 
     steps:
-      - name: Checkout du repo
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Extraire la version
+      - name: Extract version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -94,7 +94,7 @@ jobs:
           echo "full=$FULL" >> $GITHUB_OUTPUT
           echo "n8n=$N8N"   >> $GITHUB_OUTPUT
 
-      - name: Extraire les notes de changelog
+      - name: Extract changelog notes
         id: changelog
         run: |
           FULL="${{ steps.version.outputs.full }}"
@@ -103,28 +103,28 @@ jobs:
           echo "${NOTES}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Créer la GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.full }}
           name: Addon ${{ steps.version.outputs.full }} (n8n ${{ steps.version.outputs.n8n }})
           body: |
-            ## Addon hassio-n8n ${{ steps.version.outputs.full }}
-            Embarque **n8n ${{ steps.version.outputs.n8n }}**.
+            ## hassio-n8n addon ${{ steps.version.outputs.full }}
+            Ships **n8n ${{ steps.version.outputs.n8n }}**.
 
             ${{ steps.changelog.outputs.notes }}
 
-            ### Images Docker
+            ### Docker images
 
-            | Architecture | Tag complet | Tag n8n (flottant) |
+            | Architecture | Full tag | n8n tag (floating) |
             |---|---|---|
             | amd64 | `ghcr.io/momohteks/hassio-n8n-amd64:${{ steps.version.outputs.full }}` | `...:${{ steps.version.outputs.n8n }}` |
 
-            > aarch64 temporairement désactivé.
+            > aarch64 is temporarily disabled.
 
             ### Installation
 
-            Ajoutez ce dépôt dans Home Assistant :
+            Add this repository in Home Assistant:
             ```
             https://github.com/momohteks/hassio-n8n
             ```

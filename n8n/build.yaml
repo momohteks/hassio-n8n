@@ -1,6 +1,6 @@
 build_from:
-  # aarch64 temporarily disabled — see config.yaml and CLAUDE.md
   amd64: python:3.13-slim
+  aarch64: python:3.13-slim
 labels:
   org.opencontainers.image.title: "n8n Home Assistant Addon"
   org.opencontainers.image.description: "n8n workflow automation for Home Assistant"

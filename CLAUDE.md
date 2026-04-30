@@ -46,7 +46,7 @@ supervisord**. Repo: https://github.com/momohteks/hassio-n8n
 ## Docker images
 
 - `ghcr.io/momohteks/hassio-n8n-amd64:{version}`
-- `ghcr.io/momohteks/hassio-n8n-aarch64:{version}` (currently disabled, see below)
+- `ghcr.io/momohteks/hassio-n8n-aarch64:{version}`
 
 ## Versioning
 
@@ -116,9 +116,7 @@ docker run -p 5678:5678 -p 8081:8081 -v $(pwd)/data:/data hassio-n8n-test
 ## Supported architectures
 
 - `amd64` (x86_64)
-- ~~`aarch64`~~ **temporarily disabled.** To re-enable: restore
-  `aarch64` in `n8n/config.yaml` + `n8n/build.yaml` and the matching
-  matrix line in `.github/workflows/publish-release.yml`.
+- `aarch64` (ARM64)
 
 ## Documentation policy
 

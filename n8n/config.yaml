@@ -6,9 +6,9 @@ version: "2.18.5.3"
 slug: n8n
 description: n8n — Workflow Automation Platform (direct, no HA Ingress)
 url: https://github.com/momohteks/hassio-n8n
-# aarch64 temporarily disabled (see CLAUDE.md / CHANGELOG).
 arch:
   - amd64
+  - aarch64
 startup: application
 boot: auto
 # HA Ingress is intentionally disabled — n8n 2.x does not fully support

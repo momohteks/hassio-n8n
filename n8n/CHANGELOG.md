@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.18.6.1 — 2026-05-04
+
+- New n8n version: 2.18.5 → 2.18.6
+
+
 ## 2.18.5.3 — 2026-04-30
 
 - **Fix port conflict between nginx and n8n.** 2.18.5.2 set

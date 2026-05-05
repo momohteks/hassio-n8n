@@ -1,7 +1,7 @@
 # Base: python:3.13-slim (Debian, glibc)
 #   - Python 3.13 is required by the n8n 2.x Python Task Runner
 #   - glibc keeps n8n's native prebuilds happy (isolated-vm, sqlite3, etc.)
-ARG N8N_VERSION=2.18.6
+ARG N8N_VERSION=2.18.7
 FROM python:3.13-slim
 
 ARG N8N_VERSION
